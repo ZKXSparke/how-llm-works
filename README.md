@@ -73,6 +73,14 @@ python -m http.server 8000
 - demo 中的向量分量、2D 坐标、相似度等数值为**示意数据**(界面已标注),用于教学演示;真实系统在高维空间用真实嵌入模型计算。
 - 代码以 **MIT** 许可证开源(见 [LICENSE](LICENSE))。
 
+## 关注作者 · Follow
+
+由 **Sparker** 制作。四流边缘瞎拍爱好者 · 菜鸟手残游戏玩家 🙂
+
+在**小红书**找到我 —— **Spark**(小红书号 `1675517590`),扫码关注:
+
+<img src="assets/xhs-follow.png" alt="小红书 @Spark 关注二维码" width="280">
+
 ---
 
 <div align="center">
