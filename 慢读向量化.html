@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>慢读向量化</title>
+<style>
+/* ===== 《慢读向量化》 instrument aesthetic — ported from Claude Design styles.css =====
+   Light app shell + dark data canvas. Single signature data-red. alpha = value*0.7. */
+:root{
+  --bg:#f5f5f5; --panel:#fafafa; --panel-2:#f0f0f0;
+  --ink:#333; --ink-soft:#777; --ink-faint:#a3a3a3;
+  --border:#ddd; --border-soft:#e6e6e6;
+  --blue:#1e6fff; --blue-soft:#e8f0ff;
+  --canvas:#101010; --canvas-2:#191919; --canvas-line:#2a2a2a; --canvas-line-soft:#202020;
+  --canvas-ink:#c3c3c3; --canvas-ink-soft:#6f6f6f;
+  --red:255,71,64;
+  --mono: ui-monospace,"SF Mono","Menlo","Consolas","Liberation Mono",monospace;
+  --sans: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Source Han Sans SC",sans-serif;
+  --t:0.14s cubic-bezier(.4,0,.2,1);
+  /* slower, eased step-entry timing (this build's calmer pacing) */
+  --enter:0.62s cubic-bezier(.22,.61,.36,1);
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{margin:0;font-family:var(--sans);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+.mono{font-family:var(--mono);font-feature-settings:"tnum" 1;}
+::selection{background:rgba(var(--red),.18);}
+
+.app{height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+
+/* top bar */
+.topbar{height:50px;flex:0 0 50px;display:flex;align-items:center;gap:18px;padding:0 18px;background:var(--panel);border-bottom:1px solid var(--border);}
+.brand{display:flex;align-items:baseline;gap:10px;min-width:0;}
+.brand__mark{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:#fff;background:var(--ink);padding:3px 7px;border-radius:2px;white-space:nowrap;}
+.brand__name{font-weight:600;font-size:15px;letter-spacing:.01em;white-space:nowrap;}
+.brand__sub{font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.topbar__spacer{flex:1;}
+.stepind{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;color:var(--ink-soft);letter-spacing:.04em;white-space:nowrap;}
+.stepind b{color:var(--ink);font-weight:600;}
+.readouts{display:flex;gap:0;border:1px solid var(--border);border-radius:3px;overflow:hidden;}
+.readout{display:flex;flex-direction:column;gap:1px;padding:5px 11px;background:var(--panel-2);border-right:1px solid var(--border);}
+.readout:last-child{border-right:none;}
+.readout__k{font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:var(--ink-faint);text-transform:uppercase;white-space:nowrap;}
+.readout__v{font-family:var(--mono);font-size:12px;color:var(--ink);font-weight:600;white-space:nowrap;}
+.readout__v.is-live{color:var(--blue);}
+.livetoggle{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;color:var(--ink-faint);border:1px solid var(--border);border-radius:3px;padding:5px 9px;cursor:not-allowed;user-select:none;}
+.livetoggle .dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);}
+.livetoggle .pill{border:1px solid var(--border);border-radius:999px;padding:1px 6px;color:var(--ink-faint);font-size:9px;letter-spacing:.1em;}
+
+/* body: rail + stage */
+.body{flex:1;display:flex;min-height:0;}
+.rail{flex:0 0 360px;width:360px;background:var(--panel);border-right:1px solid var(--border);padding:26px 26px 22px;display:flex;flex-direction:column;overflow-y:auto;}
+.rail__kicker{font-family:var(--mono);font-size:10px;letter-spacing:.18em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.rail__kicker .num{color:var(--blue);font-weight:600;}
+.rail__kicker .bar{flex:1;height:1px;background:var(--border);}
+.rail__title{font-size:23px;font-weight:650;letter-spacing:.01em;line-height:1.25;margin:0 0 4px;}
+.rail__title .en{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--ink-faint);font-weight:500;margin-top:7px;text-transform:uppercase;}
+.rail__lead{font-size:16px;line-height:1.6;color:var(--ink);margin:18px 0 0;font-weight:500;text-wrap:pretty;}
+.rail__lead b{font-weight:700;}
+.rail__lead .q{color:var(--ink-soft);font-style:normal;}
+.rail__body{font-size:13.5px;line-height:1.75;color:var(--ink-soft);margin:14px 0 0;text-wrap:pretty;}
+.rail__body strong{color:var(--ink);font-weight:650;}
+.rail__body .hl{color:var(--blue);font-weight:600;}
+.rail__body .rd{color:#ff4740;font-weight:600;}
+.rail__quote{border-left:2px solid var(--blue);padding:7px 0 7px 14px;margin:16px 0 0;font-size:14.5px;line-height:1.55;color:var(--ink);font-weight:500;}
+.rail__foot{margin-top:auto;padding-top:18px;}
+.note{display:flex;gap:8px;align-items:flex-start;font-family:var(--mono);font-size:10.5px;line-height:1.5;letter-spacing:.01em;color:var(--ink-faint);border-top:1px dashed var(--border);padding-top:12px;}
+.note .tag{color:var(--ink-soft);border:1px solid var(--border);border-radius:2px;padding:1px 5px;flex:0 0 auto;letter-spacing:.08em;}
+
+/* stage */
+.stage{flex:1;min-width:0;position:relative;display:flex;flex-direction:column;padding:24px 28px;overflow:hidden;}
+.stage__head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.stage__label{font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--ink-faint);text-transform:uppercase;white-space:nowrap;}
+.stage__meta{display:flex;gap:14px;font-family:var(--mono);font-size:11px;color:var(--ink-faint);}
+.stage__meta b{color:var(--ink-soft);font-weight:600;}
+.stage__inner{flex:1;min-height:0;display:flex;}
+
+/* REALITY aside (实际情况) — calm secondary layer in the rail */
+.reality{margin:18px 0 0;border-left:2px solid rgba(var(--red),.55);background:linear-gradient(90deg,rgba(var(--red),.05),transparent 80%);padding:11px 0 11px 14px;border-radius:0 3px 3px 0;}
+.reality__lab{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:rgba(var(--red),.95);margin-bottom:7px;}
+.reality__lab .sq{width:6px;height:6px;background:rgb(var(--red));border-radius:1px;}
+.reality__lab .en{color:var(--ink-faint);letter-spacing:.16em;}
+.reality__body{font-size:12.5px;line-height:1.7;color:var(--ink-soft);text-wrap:pretty;}
+.reality__body strong{color:var(--ink);font-weight:650;}
+.reality__body .hl{color:var(--blue);font-weight:600;}
+.reality__body em{font-style:normal;color:var(--ink);background:rgba(var(--red),.08);padding:0 3px;border-radius:2px;}
+.formula{margin:9px 0 4px;padding:9px 11px;background:#fff;border:1px solid var(--border);border-radius:3px;font-family:var(--mono);font-size:12.5px;line-height:1.7;color:#222;overflow-x:auto;}
+.formula .lead{display:block;font-size:10px;color:var(--ink-faint);letter-spacing:.06em;margin-bottom:4px;}
+.formula sub,.formula sup{font-size:.72em;}
+.formula .op{color:var(--blue);}
+.formula .rng{display:block;margin-top:5px;font-size:11px;color:var(--ink-soft);}
+
+/* ---- Cover / intro (step 0) ---- */
+.cover{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:20px 32px;overflow-y:auto;}
+.cover__inner{max-width:680px;width:100%;}
+.cover__kicker{font-family:var(--mono);font-size:11px;letter-spacing:.24em;color:var(--ink-faint);text-transform:uppercase;margin-bottom:18px;display:flex;align-items:center;gap:10px;}
+.cover__kicker .bar{flex:1;height:1px;background:var(--border);}
+.cover__title{font-size:46px;font-weight:700;letter-spacing:.02em;line-height:1.1;margin:0;}
+.cover__sub{font-size:19px;font-weight:500;color:var(--ink-soft);margin:14px 0 0;line-height:1.45;}
+.cover__body{margin:26px 0 0;}
+.cover__body p{font-size:15px;line-height:1.8;color:var(--ink);margin:0 0 14px;text-wrap:pretty;}
+.cover__body p:last-child{margin-bottom:0;}
+.cover__body strong{font-weight:700;}
+.cover__body .hl{color:var(--blue);font-weight:650;}
+.cover__pipe{font-family:var(--mono);color:var(--blue);font-size:14px;letter-spacing:.02em;}
+.cover__note{margin:24px 0 0;display:flex;gap:10px;align-items:flex-start;font-family:var(--mono);font-size:11px;line-height:1.65;color:var(--ink-faint);border:1px dashed var(--border);border-radius:4px;padding:12px 14px;background:var(--panel-2);}
+.cover__note .tag{flex:0 0 auto;color:var(--ink-soft);border:1px solid var(--border);border-radius:2px;padding:1px 6px;letter-spacing:.08em;}
+.cover__note strong{color:var(--ink-soft);font-weight:650;}
+.cover__cta{margin:28px 0 0;}
+.cover__cta button{font-family:var(--sans);font-size:15px;font-weight:600;padding:13px 30px;border-radius:3px;border:1px solid var(--blue);background:var(--blue);color:#fff;cursor:pointer;transition:background var(--t);}
+.cover__cta button:hover{background:#1862e6;}
+
+/* document panel */
+.docpanel{flex:1;min-height:0;overflow-y:auto;background:#fff;border:1px solid var(--border);border-radius:4px;padding:8px 0;}
+.doc-text{font-size:15px;line-height:1.7;color:var(--ink);}
+.doc-text .num{font-family:var(--mono);font-size:13.5px;color:#222;}
+.docfoot{flex:0 0 auto;padding:10px 4px 0;font-family:var(--mono);font-size:10.5px;color:var(--ink-faint);display:flex;align-items:center;gap:8px;}
+.docfoot .lic{border:1px solid var(--border);border-radius:2px;padding:1px 6px;letter-spacing:.06em;}
+
+/* chunk grid */
+.chunkgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-content:start;width:100%;}
+.chunk{background:#fff;border:1px solid var(--border);border-radius:4px;padding:11px 13px;display:flex;flex-direction:column;gap:7px;opacity:0;transform:translateY(8px);animation:chunkIn var(--enter) forwards;}
+@keyframes chunkIn{to{opacity:1;transform:none;}}
+.chunk__id{font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--blue);font-weight:600;}
+.chunk__t{font-size:13px;line-height:1.55;color:var(--ink);}
+.chunk__t .num{font-family:var(--mono);font-size:12px;}
+
+/* tokenization */
+.tokwrap{flex:1;display:flex;flex-direction:column;gap:0;min-height:0;}
+.tokline{background:#fff;border:1px solid var(--border);border-radius:4px;padding:26px 28px;line-height:2.6;font-size:21px;display:flex;flex-wrap:wrap;gap:7px 7px;align-content:flex-start;}
+.tok{position:relative;display:inline-flex;align-items:center;padding:5px 9px;border-radius:3px;border:1px solid var(--border);background:var(--panel);color:var(--ink);opacity:0;transform:translateY(6px);animation:tokIn .4s cubic-bezier(.22,.61,.36,1) forwards;}
+.tok.is-num{background:#fff;border-color:#d6d6d6;}
+.tok.is-num .tok__t{font-family:var(--mono);}
+.tok.is-punct{background:transparent;border-color:transparent;color:var(--ink-faint);padding:5px 2px;}
+.tok__t{font-size:21px;}
+.tok__i{position:absolute;top:-8px;right:-4px;font-family:var(--mono);font-size:8px;color:var(--ink-faint);background:var(--panel);padding:0 2px;}
+@keyframes tokIn{to{opacity:1;transform:none;}}
+
+/* dark data canvas */
+.canvas{flex:1;min-height:0;position:relative;background:var(--canvas);border:1px solid #000;border-radius:4px;overflow:hidden;color:var(--canvas-ink);
+  background-image:linear-gradient(var(--canvas-line-soft) 1px,transparent 1px),linear-gradient(90deg,var(--canvas-line-soft) 1px,transparent 1px);background-size:34px 34px;}
+.canvas__corner{position:absolute;font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--canvas-ink-soft);z-index:5;}
+.canvas__corner.tl{top:12px;left:14px;} .canvas__corner.tr{top:12px;right:14px;text-align:right;}
+.canvas__corner.bl{bottom:12px;left:14px;} .canvas__corner.br{bottom:12px;right:14px;text-align:right;}
+
+/* co-occurrence (4a) */
+.cograph-wrap{display:flex;gap:18px;width:100%;height:100%;}
+.cocol{flex:1;display:flex;flex-direction:column;min-width:0;}
+.cocol__head{font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:8px;display:flex;align-items:center;gap:8px;}
+.cocol__head .swatch{width:9px;height:9px;border-radius:50%;}
+.cocol__svg{flex:1;min-height:0;}
+.evid{font-family:var(--mono);font-size:11.5px;line-height:1.7;color:#6f6f6f;margin-top:8px;}
+.evid .cid{color:#4a4a4a;margin-right:8px;}
+
+/* masked guess (4b) */
+.guess{display:flex;flex-direction:column;gap:18px;width:100%;height:100%;justify-content:center;align-items:center;padding:20px;}
+.guess__sentence{font-size:22px;line-height:2;color:var(--canvas-ink);display:flex;flex-wrap:wrap;gap:4px;justify-content:center;align-items:center;max-width:760px;text-align:center;}
+.guess__sentence .w{color:#7e7e7e;}
+.guess__blank{display:inline-flex;align-items:center;justify-content:center;min-width:96px;height:40px;border:1px dashed #444;border-radius:3px;font-family:var(--mono);color:#fff;background:#000;position:relative;transition:border-color .3s;}
+.guess__blank.is-filled{border-style:solid;border-color:rgba(var(--red),.7);}
+.candbars{width:100%;max-width:560px;display:flex;flex-direction:column;gap:7px;}
+.cand{display:grid;grid-template-columns:96px 1fr 56px;align-items:center;gap:12px;}
+.cand__w{font-family:var(--mono);font-size:14px;color:var(--canvas-ink);text-align:right;}
+.cand__track{height:18px;background:var(--canvas-2);border:1px solid var(--canvas-line);border-radius:2px;overflow:hidden;}
+.cand__fill{height:100%;background:rgb(var(--red));width:0;transition:width .55s cubic-bezier(.22,.61,.36,1);}
+.cand__p{font-family:var(--mono);font-size:12px;color:var(--canvas-ink-soft);}
+.cand.is-top .cand__w{color:#fff;font-weight:600;}
+.cand.is-top .cand__p{color:#fff;}
+
+/* heatmap rows (4c) */
+.heatwrap{display:flex;flex-direction:column;gap:22px;width:100%;height:100%;justify-content:center;padding:24px 30px;}
+.heatrow{display:flex;flex-direction:column;gap:8px;}
+.heatrow__label{display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--canvas-ink-soft);}
+.heatrow__label .name{color:var(--canvas-ink);}
+.heatrow__label .name .tag{color:var(--blue);margin-right:8px;}
+.heat-canvas{width:100%;height:46px;display:block;border:1px solid var(--canvas-line);border-radius:2px;background:#000;}
+.heataxis{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;color:#4a4a4a;margin-top:-2px;}
+.heatsim{align-self:center;font-family:var(--mono);font-size:12px;color:var(--canvas-ink);border:1px solid var(--canvas-line);border-radius:3px;padding:6px 14px;background:var(--canvas-2);letter-spacing:.04em;}
+.heatsim b{color:rgb(var(--red));}
+
+/* scatter / 2D map */
+.scatter-host{width:100%;height:100%;position:relative;}
+.scatter-host svg{display:block;}
+.scatter-tip{position:absolute;z-index:20;pointer-events:none;background:#000;border:1px solid rgba(var(--red),.6);border-radius:3px;padding:8px 11px;max-width:300px;font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--canvas-ink);box-shadow:0 6px 24px rgba(0,0,0,.5);display:none;}
+.scatter-tip .coord{color:#fff;}
+.scatter-tip .txt{color:var(--canvas-ink-soft);margin-top:4px;font-size:11px;}
+
+/* index matrix (step5) */
+.idx-wrap{display:flex;gap:18px;width:100%;height:100%;}
+.idx-col{display:flex;flex-direction:column;min-width:0;min-height:0;}
+.idx-col__head{font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--ink-soft);margin-bottom:8px;}
+.matrix{display:flex;flex-direction:column;gap:3px;overflow-y:auto;min-height:0;flex:1;padding-right:4px;}
+.matrix__row{display:flex;align-items:center;gap:8px;}
+.matrix__id{font-family:var(--mono);font-size:10px;color:var(--blue);width:30px;flex:0 0 30px;}
+.matrix__cells{flex:1;height:15px;display:block;border:1px solid var(--canvas-line);border-radius:1px;background:#000;}
+
+/* prompt assembly + answer (step8) */
+.gen{display:flex;flex-direction:column;gap:12px;width:100%;height:100%;padding:18px 22px;overflow-y:auto;}
+.asm{display:flex;flex-direction:column;gap:9px;}
+.blk{font-family:var(--mono);font-size:12px;line-height:1.6;border:1px solid var(--canvas-line);border-radius:3px;padding:10px 13px;background:var(--canvas-2);color:var(--canvas-ink);opacity:0;transform:translateY(8px);transition:opacity var(--enter),transform var(--enter);}
+.blk.in{opacity:1;transform:none;}
+.blk .bh{display:block;font-size:9.5px;letter-spacing:.1em;color:var(--blue);margin-bottom:4px;text-transform:uppercase;}
+.blk.sys{color:var(--canvas-ink-soft);}
+.blk.ctx{border-color:rgba(var(--red),.5);}
+.blk.q{border-color:var(--blue);}
+.answer-box{margin-top:6px;border:1px solid rgba(var(--red),.55);border-radius:3px;background:#000;padding:14px 16px;font-family:var(--mono);font-size:15px;line-height:1.7;color:#fff;min-height:24px;opacity:0;transition:opacity var(--enter);}
+.answer-box.in{opacity:1;}
+.answer-box .cur{color:#666;}
+.rag-note{font-family:var(--mono);font-size:11px;color:var(--canvas-ink-soft);}
+.rag-note b{color:rgb(var(--red));}
+
+/* ranking table (step7) */
+.rank{width:100%;}
+.rank__row{display:grid;grid-template-columns:118px 1fr 46px;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid var(--canvas-line-soft);}
+.rank__lbl{font-family:var(--sans);font-size:12.5px;color:var(--canvas-ink);white-space:nowrap;}
+.rank__track{height:11px;background:var(--canvas-2);border:1px solid var(--canvas-line);border-radius:2px;overflow:hidden;}
+.rank__fill{height:100%;background:rgb(var(--red));transition:width var(--t);}
+.rank__p{font-family:var(--mono);font-size:11.5px;color:var(--canvas-ink-soft);text-align:right;}
+.rank__row.is-top .rank__lbl{color:#fff;font-weight:600;}
+.rank__row.is-top .rank__p{color:#fff;}
+.maphint{font-family:var(--mono);font-size:10.5px;color:var(--canvas-ink-soft);display:flex;align-items:center;gap:12px;}
+.reset-chip{font-family:var(--mono);font-size:10px;letter-spacing:.06em;color:var(--canvas-ink-soft);border:1px solid var(--canvas-line);border-radius:3px;padding:4px 9px;cursor:pointer;background:var(--canvas-2);transition:color var(--t),border-color var(--t);}
+.reset-chip:hover{color:#fff;border-color:#444;}
+
+/* pipeline (step6) */
+.pipe{display:flex;flex-direction:column;gap:14px;width:100%;height:100%;justify-content:center;padding:24px 30px;}
+.pipe__row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.pipe__box{font-family:var(--mono);font-size:12.5px;border:1px solid var(--canvas-line);border-radius:3px;padding:11px 15px;background:var(--canvas-2);color:var(--canvas-ink);opacity:0;transform:translateY(8px);transition:opacity var(--enter),transform var(--enter);}
+.pipe__box.in{opacity:1;transform:none;}
+.pipe__box .bh{display:block;font-size:9px;letter-spacing:.1em;color:var(--blue);margin-bottom:4px;text-transform:uppercase;}
+.pipe__box.qcoord{border-color:var(--blue);color:#bcd2ff;}
+.pipe__arrow{font-family:var(--mono);color:var(--canvas-ink-soft);font-size:18px;opacity:0;transition:opacity var(--enter);}
+.pipe__arrow.in{opacity:1;}
+
+/* footer nav */
+.footer{height:62px;flex:0 0 62px;display:flex;align-items:center;gap:16px;padding:0 18px;background:var(--panel);border-top:1px solid var(--border);}
+.nav-btn{font-family:var(--sans);font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:3px;border:1px solid var(--border);background:#fff;color:var(--ink);cursor:pointer;transition:background var(--t),border-color var(--t),color var(--t),opacity var(--t);}
+.nav-btn:hover:not(:disabled){background:var(--panel-2);}
+.nav-btn:disabled{opacity:.4;cursor:not-allowed;}
+.nav-btn.primary{background:var(--blue);border-color:var(--blue);color:#fff;}
+.nav-btn.primary:hover:not(:disabled){background:#1862e6;}
+.nav-btn .k{font-family:var(--mono);font-size:14px;line-height:1;}
+.nav-btn.ghost{border-color:transparent;background:transparent;color:var(--ink-soft);}
+.nav-btn.ghost:hover:not(:disabled){background:var(--panel-2);color:var(--ink);}
+.progress{flex:1;display:flex;align-items:center;gap:3px;}
+.seg{flex:1;height:4px;border-radius:2px;background:var(--border);position:relative;overflow:hidden;cursor:pointer;transition:background var(--t);}
+.seg .fill{position:absolute;inset:0;background:var(--blue);transform-origin:left;transition:transform var(--t);}
+.seg.done{background:var(--blue);}
+.seglabel{font-family:var(--mono);font-size:10px;color:var(--ink-faint);letter-spacing:.04em;white-space:nowrap;min-width:140px;text-align:right;}
+.seglabel b{color:var(--ink);}
+
+.fade-step{animation:fadeStep var(--enter);}
+@keyframes fadeStep{from{opacity:0;}to{opacity:1;}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+/* ====================================================================
+   DATA — ported verbatim from Claude Design data.js
+   Real content: corpus, tokens, question, answer.
+   Illustrative numbers: vectors (vecFor), 2D coords, similarities.
+   ==================================================================== */
+const VDATA = (function(){
+  "use strict";
+  const chunks = [
+    { id:"C1",  text:"西湖位于浙江省杭州市旧城的西侧。" },
+    { id:"C2",  text:"西湖水面面积约 6.39 平方千米,平均水深约 2.27 米。" },
+    { id:"C3",  text:"西湖原是钱塘江的一部分,由泥沙淤积逐渐形成。" },
+    { id:"C4",  text:"苏堤由苏轼疏浚西湖时用淤泥堆筑,南北横贯湖面约 2.8 千米,上有六座石拱桥。" },
+    { id:"C5",  text:"白堤东起断桥,全长约 1 千米,两侧种植碧桃与翠柳。" },
+    { id:"C6",  text:"雷峰塔原为吴越国王钱俶所建,1924 年倒塌,2002 年在原址重建,新塔高 71.7 米。" },
+    { id:"C7",  text:"三潭印月又称小瀛洲,是西湖中的一座岛,面积约 7 公顷。" },
+    { id:"C8",  text:"孤山是西湖中最大的天然岛屿,海拔约 35 米。" },
+    { id:"C9",  text:"“西湖”这一名称最早出现在白居易的诗作中。" },
+    { id:"C10", text:"2011 年,杭州西湖文化景观被列入世界遗产名录。" },
+    { id:"C11", text:"西湖十景包括苏堤春晓、断桥残雪、雷峰夕照、三潭印月等。" },
+    { id:"C12", text:"杨万里写下名句“接天莲叶无穷碧,映日荷花别样红”来描写西湖荷花。" }
+  ];
+  const question = "雷峰塔是什么时候倒掉、又是什么时候重建的?";
+  const answerTarget = "C6";
+  const answer = "雷峰塔在 1924 年倒塌,2002 年在原址重建。";
+  const tokensC6 = [
+    {t:"雷峰塔",y:"word"},{t:"原",y:"word"},{t:"为",y:"word"},{t:"吴越",y:"word"},{t:"国王",y:"word"},{t:"钱俶",y:"word"},
+    {t:"所",y:"word"},{t:"建",y:"word"},{t:",",y:"punct"},{t:"1924",y:"num"},{t:"年",y:"word"},{t:"倒塌",y:"word"},
+    {t:",",y:"punct"},{t:"2002",y:"num"},{t:"年",y:"word"},{t:"在",y:"word"},{t:"原址",y:"word"},{t:"重建",y:"word"},
+    {t:",",y:"punct"},{t:"新塔",y:"word"},{t:"高",y:"word"},{t:"71.7",y:"num"},{t:"米",y:"word"},{t:"。",y:"punct"}
+  ];
+  const cooccurrence = [
+    { center:"西湖", sentences:["C1","C2","C4","C10"],
+      neighbors:[{w:"杭州",s:0.92},{w:"湖面",s:0.84},{w:"堤",s:0.66},{w:"景观",s:0.71},{w:"岛",s:0.58},{w:"荷花",s:0.47}] },
+    { center:"雷峰塔", sentences:["C6","C11"],
+      neighbors:[{w:"倒塌",s:0.90},{w:"重建",s:0.86},{w:"塔",s:0.80},{w:"原址",s:0.62},{w:"夕照",s:0.55},{w:"1924",s:0.44}] }
+  ];
+  const maskGame = {
+    pre:["雷峰塔","在","1924","年"], answer:"倒塌", post:[",","2002","年","在","原址","重建","。"],
+    candidates:[{w:"倒塌",p:0.62},{w:"坍塌",p:0.14},{w:"损毁",p:0.11},{w:"重修",p:0.06},{w:"建成",p:0.04},{w:"落成",p:0.03}]
+  };
+  function hashStr(s){ let h=2166136261>>>0; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619)>>>0; } return h>>>0; }
+  function mulberry32(a){ return function(){ a|=0; a=(a+0x6D2B79F5)|0; let t=Math.imul(a^(a>>>15),1|a); t=(t+Math.imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; }; }
+  function vecFor(seed,dim){
+    const rnd=mulberry32(hashStr(seed)); const bumps=[];
+    for(let b=0;b<7;b++) bumps.push({c:rnd()*dim,w:8+rnd()*40,a:0.45+rnd()*0.55,ph:rnd()});
+    const v=new Array(dim);
+    for(let i=0;i<dim;i++){ let val=0; for(let k=0;k<bumps.length;k++){ const d=(i-bumps[k].c)/bumps[k].w; val+=bumps[k].a*Math.exp(-d*d)*(0.6+0.4*Math.sin(i*0.3+bumps[k].ph*6.28)); } v[i]=val; }
+    let mn=Math.min.apply(null,v),mx=Math.max.apply(null,v);
+    for(let j=0;j<dim;j++) v[j]=(v[j]-mn)/(mx-mn||1);
+    return v;
+  }
+  function blend(a,b,w){ const out=new Array(a.length); for(let i=0;i<a.length;i++) out[i]=a[i]*w+b[i]*(1-w); return out; }
+  function cosineOf(a,b){ let dot=0,na=0,nb=0; for(let i=0;i<a.length;i++){ dot+=a[i]*b[i]; na+=a[i]*a[i]; nb+=b[i]*b[i]; } return dot/(Math.sqrt(na)*Math.sqrt(nb)||1); }
+  const DIM=384;
+  const heatA=vecFor("苏堤·堤·桥·湖",DIM);
+  const heatB=blend(heatA,vecFor("白堤·堤·柳·桥",DIM),0.6);
+  const heatSim=cosineOf(heatA,heatB);
+  const coords2d={
+    C1:{x:-0.62,y:0.55}, C2:{x:-0.71,y:0.40}, C3:{x:-0.55,y:0.63},
+    C7:{x:-0.35,y:0.41}, C8:{x:-0.41,y:0.30},
+    C4:{x:0.46,y:-0.35}, C5:{x:0.53,y:-0.27}, C6:{x:0.61,y:-0.55},
+    C11:{x:0.31,y:-0.14}, C9:{x:0.21,y:0.60}, C10:{x:0.06,y:0.45}, C12:{x:0.40,y:0.51}
+  };
+  // question home coord — placed so C6 (answerTarget) is genuinely nearest
+  const questionCoord={x:0.72,y:-0.62};
+  return { DIM, chunks, question, answer, answerTarget, tokensC6, cooccurrence, maskGame,
+    coords2d, questionCoord, heat:{aName:"C4",bName:"C5",a:heatA,b:heatB,sim:heatSim}, vecFor, cosineOf };
+})();
+
+/* ====================================================================
+   SHARED VIZ HELPERS (vanilla port of charts.jsx visuals)
+   ==================================================================== */
+const RED="255,71,64";
+const redAlpha = v => `rgba(${RED},${Math.max(0,Math.min(1,v))*0.7})`;
+const D = VDATA;
+const sentenceOf = id => (D.chunks.find(c=>c.id===id)||{}).text || "";
+const TOTAL_CHARS = D.chunks.reduce((n,c)=>n+c.text.replace(/\s/g,"").length,0);
+
+/* wrap digit runs in monospace */
+function withMono(text){
+  return String(text).replace(/([0-9][0-9.]*)/g, '<span class="num">$1</span>');
+}
+
+/* paint a heatmap row into a <canvas> sized to its box */
+function paintHeat(canvas, values, height){
+  const box=canvas.parentElement; const w=box.clientWidth||600; height=height||46;
+  const dpr=window.devicePixelRatio||1;
+  canvas.width=w*dpr; canvas.height=height*dpr; canvas.style.height=height+'px';
+  const ctx=canvas.getContext('2d'); ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,w,height);
+  const n=values.length, cw=w/n;
+  for(let i=0;i<n;i++){ ctx.fillStyle=redAlpha(values[i]); ctx.fillRect(i*cw,0,cw+1,height); }
+}
+
+/* ---- Scatter: real-looking 2D plot, axes/ticks/grid/titles, hover, pin, drag ----
+   opts: { points:[{id,x,y,label,tone,sim,full,r}], domain, connectFrom, pinnedId,
+           onPin(id), draggableId, onDrag(x,y) } */
+const TICKS=[-1,-0.5,0,0.5,1];
+function Scatter(host, opts){
+  const o=Object.assign({domain:[-1.15,1.15], axisX:"投影维度 1", axisY:"投影维度 2"}, opts);
+  let pinnedId = o.pinnedId||null;
+  const tip=document.createElement('div'); tip.className='scatter-tip'; host.appendChild(tip);
+  const svgNS='http://www.w3.org/2000/svg';
+  const svg=document.createElementNS(svgNS,'svg'); svg.style.display='block'; host.appendChild(svg);
+  const m={t:18,r:18,b:42,l:50};
+  let dragging=false;
+
+  function dims(){ return {W:host.clientWidth||600, H:host.clientHeight||400}; }
+  const [d0,d1]=o.domain;
+  function scales(W,H){
+    const pw=Math.max(10,W-m.l-m.r), ph=Math.max(10,H-m.t-m.b);
+    return { pw, ph,
+      sx:x=>m.l+((x-d0)/(d1-d0))*pw,
+      sy:y=>m.t+(1-(y-d0)/(d1-d0))*ph };
+  }
+  function toData(clientX,clientY){
+    const r=svg.getBoundingClientRect(); const {W,H}=dims(); const {pw,ph}=scales(W,H);
+    const px=clientX-r.left, py=clientY-r.top;
+    let x=d0+((px-m.l)/pw)*(d1-d0), y=d0+(1-(py-m.t)/ph)*(d1-d0);
+    return { x:Math.max(d0,Math.min(d1,x)), y:Math.max(d0,Math.min(d1,y)) };
+  }
+  function fillFor(p){ return p.tone==="red"?`rgba(${RED},0.85)`:p.tone==="blue"?"#1e6fff":"#8a8a8a"; }
+  function strokeFor(p){ return p.tone==="red"?"#ff4740":p.tone==="blue"?"#5d96ff":"#b5b5b5"; }
+
+  function draw(){
+    const {W,H}=dims(); if(!W||!H) return;
+    svg.setAttribute('width',W); svg.setAttribute('height',H);
+    const {pw,ph,sx,sy}=scales(W,H);
+    const pts=o.points;
+    const fromPt=o.connectFrom?pts.find(p=>p.id===o.connectFrom):null;
+    const pinned=pts.find(p=>p.id===pinnedId);
+    let s='';
+    // grid
+    TICKS.forEach(t=>{ s+=`<line x1="${sx(t)}" y1="${m.t}" x2="${sx(t)}" y2="${m.t+ph}" stroke="#222" stroke-width="1"/>`; });
+    TICKS.forEach(t=>{ s+=`<line x1="${m.l}" y1="${sy(t)}" x2="${m.l+pw}" y2="${sy(t)}" stroke="#222" stroke-width="1"/>`; });
+    // zero axes
+    s+=`<line x1="${sx(0)}" y1="${m.t}" x2="${sx(0)}" y2="${m.t+ph}" stroke="#383838" stroke-width="1"/>`;
+    s+=`<line x1="${m.l}" y1="${sy(0)}" x2="${m.l+pw}" y2="${sy(0)}" stroke="#383838" stroke-width="1"/>`;
+    // frame
+    s+=`<rect x="${m.l}" y="${m.t}" width="${pw}" height="${ph}" fill="none" stroke="#3a3a3a" stroke-width="1"/>`;
+    // ticks + numbers
+    TICKS.forEach(t=>{ s+=`<line x1="${sx(t)}" y1="${m.t+ph}" x2="${sx(t)}" y2="${m.t+ph+4}" stroke="#4a4a4a"/>`+
+      `<text x="${sx(t)}" y="${m.t+ph+17}" fill="#6f6f6f" font-size="11" font-family="${getFont()}" text-anchor="middle">${t.toFixed(1)}</text>`; });
+    TICKS.forEach(t=>{ s+=`<line x1="${m.l-4}" y1="${sy(t)}" x2="${m.l}" y2="${sy(t)}" stroke="#4a4a4a"/>`+
+      `<text x="${m.l-9}" y="${sy(t)+4}" fill="#6f6f6f" font-size="11" font-family="${getFont()}" text-anchor="end">${t.toFixed(1)}</text>`; });
+    // axis titles
+    s+=`<text x="${m.l+pw/2}" y="${H-6}" fill="#8a8a8a" font-size="12" font-family="${getFont()}" text-anchor="middle" letter-spacing="1">${o.axisX}</text>`;
+    s+=`<text x="15" y="${m.t+ph/2}" fill="#8a8a8a" font-size="12" font-family="${getFont()}" text-anchor="middle" letter-spacing="1" transform="rotate(-90 15 ${m.t+ph/2})">${o.axisY}</text>`;
+    // connection lines
+    if(fromPt){ pts.filter(p=>p.id!==fromPt.id).forEach(p=>{ const top=p.tone==="red";
+      s+=`<line x1="${sx(fromPt.x)}" y1="${sy(fromPt.y)}" x2="${sx(p.x)}" y2="${sy(p.y)}" stroke="${redAlpha(p.sim!=null?p.sim:0.2)}" stroke-width="${top?1.8:1}"/>`; }); }
+    // pinned crosshair
+    if(pinned){
+      s+=`<line x1="${sx(pinned.x)}" y1="${sy(pinned.y)}" x2="${sx(pinned.x)}" y2="${sy(d0)}" stroke="#fff" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>`+
+         `<line x1="${sx(pinned.x)}" y1="${sy(pinned.y)}" x2="${m.l}" y2="${sy(pinned.y)}" stroke="#fff" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>`+
+         `<rect x="${sx(pinned.x)-19}" y="${m.t+ph+1}" width="38" height="15" fill="#000"/>`+
+         `<text x="${sx(pinned.x)}" y="${m.t+ph+12}" fill="#fff" font-size="10.5" font-family="${getFont()}" text-anchor="middle">${pinned.x.toFixed(2)}</text>`+
+         `<rect x="${m.l-44}" y="${sy(pinned.y)-8}" width="38" height="15" fill="#000"/>`+
+         `<text x="${m.l-25}" y="${sy(pinned.y)+3}" fill="#fff" font-size="10.5" font-family="${getFont()}" text-anchor="middle">${pinned.y.toFixed(2)}</text>`;
+    }
+    // points
+    pts.forEach(p=>{
+      const isDrag=p.id===o.draggableId; const r=p.r||(p.tone==="gray"?5:6.5);
+      if(isDrag||p.tone==="red") s+=`<circle cx="${sx(p.x)}" cy="${sy(p.y)}" r="${r+5}" fill="none" stroke="${strokeFor(p)}" stroke-width="1" opacity="0.4"/>`;
+      s+=`<g class="pt" data-id="${p.id}" style="cursor:${isDrag?'grab':(o.onPin?'pointer':'default')}">`+
+         `<circle cx="${sx(p.x)}" cy="${sy(p.y)}" r="${r}" fill="${fillFor(p)}" stroke="${strokeFor(p)}" stroke-width="1"/>`+
+         (p.label?`<text x="${sx(p.x)+r+6}" y="${sy(p.y)+4}" fill="${p.tone==='gray'?'#9a9a9a':'#e6e6e6'}" font-size="13" font-family="${getSans()}">${p.label}</text>`:'')+
+         `</g>`;
+    });
+    svg.innerHTML=s;
+    bindPts();
+  }
+  function getFont(){ return "ui-monospace,'SF Mono',Menlo,Consolas,monospace"; }
+  function getSans(){ return "-apple-system,'PingFang SC','Microsoft YaHei',sans-serif"; }
+
+  function bindPts(){
+    svg.querySelectorAll('.pt').forEach(g=>{
+      const id=g.dataset.id; const p=o.points.find(pp=>pp.id===id);
+      g.addEventListener('mouseenter', e=>{ showTip(p, e); });
+      g.addEventListener('mousemove', e=>{ moveTip(e); });
+      g.addEventListener('mouseleave', ()=>{ tip.style.display='none'; });
+      if(o.onPin) g.addEventListener('click', e=>{ pinnedId = (id===pinnedId?null:id); o.onPin(pinnedId); draw(); });
+      if(id===o.draggableId) g.addEventListener('mousedown', e=>{ e.preventDefault(); dragging=true; });
+    });
+  }
+  function showTip(p,e){
+    let html=`<div class="coord">${p.id} · (${p.x.toFixed(2)}, ${p.y.toFixed(2)})</div>`;
+    if(p.full) html+=`<div class="txt">${p.full}</div>`;
+    if(p.sim!=null) html+=`<div class="coord">cosine ≈ ${p.sim.toFixed(3)}</div>`;
+    tip.innerHTML=html; tip.style.display='block'; moveTip(e);
+  }
+  function moveTip(e){
+    const r=host.getBoundingClientRect();
+    let x=e.clientX-r.left+14, y=e.clientY-r.top-10;
+    if(x+260>r.width) x=r.width-260;
+    tip.style.left=x+'px'; tip.style.top=Math.max(6,y)+'px';
+  }
+  // drag
+  function onMove(e){ if(!dragging||!o.onDrag) return; const d=toData(e.clientX,e.clientY); o.onDrag(d.x,d.y); }
+  function onUp(){ dragging=false; }
+  if(o.draggableId){ window.addEventListener('mousemove',onMove); window.addEventListener('mouseup',onUp); }
+
+  const ro=new ResizeObserver(draw); ro.observe(host);
+  draw();
+  return {
+    update(newOpts){ Object.assign(o,newOpts); if(newOpts && 'pinnedId' in newOpts) pinnedId=newOpts.pinnedId; draw(); },
+    setPinned(id){ pinnedId=id; draw(); },
+    redraw:draw,
+    destroy(){ ro.disconnect(); if(o.draggableId){ window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp); } }
+  };
+}
+
+/* ---- CoGraph: radial co-occurrence (4a) ----
+   DISTANCE encodes strength: stronger co-occurrence (higher s) sits CLOSER to center.
+   radius = Rmax - s*(Rmax - Rmin). Angular placement unchanged (no label overlap).
+   Line width kept as a redundant secondary cue; numeric label kept on each spoke. */
+function CoGraph(host, center, neighbors, tone){
+  let firstDraw=true;
+  function draw(animate){
+    const W=host.clientWidth||300, H=host.clientHeight||300; if(!W||!H) return;
+    const cx=W/2, cy=H/2, n=neighbors.length;
+    // radius band: keep closest clear of the center node (r=26) and farthest inside the panel
+    const reach=Math.min(W,H)*0.5;
+    const Rmin=46;                                   // strongest neighbor distance (just outside center node)
+    const Rmax=Math.max(Rmin+34, Math.min(reach-26, reach*0.92)); // weakest neighbor distance, clamped inside panel
+    const radiusOf=s=>Rmax - Math.max(0,Math.min(1,s))*(Rmax-Rmin); // s=1 -> Rmin (near), s=0 -> Rmax (far)
+    const centerColor= tone==="blue"?"#1e6fff":"#ff4740";
+    let s='';
+    // faint reference rings at s=1 (near) and s=0 (far) so the distance scale reads
+    s+=`<circle cx="${cx}" cy="${cy}" r="${Rmin}" fill="none" stroke="#262626" stroke-width="1" stroke-dasharray="2 4"/>`+
+       `<circle cx="${cx}" cy="${cy}" r="${Rmax}" fill="none" stroke="#222" stroke-width="1" stroke-dasharray="2 4"/>`;
+    neighbors.forEach((nb,i)=>{ const ang=(-90+(360/n)*i)*Math.PI/180; const R=radiusOf(nb.s); const nx=cx+Math.cos(ang)*R, ny=cy+Math.sin(ang)*R;
+      const len=R;
+      s+=`<line class="cospoke" data-len="${len}" x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="${redAlpha(nb.s)}" stroke-width="${1+nb.s*5}" stroke-linecap="round"${animate?` stroke-dasharray="${len}" stroke-dashoffset="${len}"`:''}/>`+
+         `<text class="conode" x="${(cx+nx)/2}" y="${(cy+ny)/2-4}" fill="#6f6f6f" font-size="10" font-family="ui-monospace,monospace" text-anchor="middle"${animate?' opacity="0"':''}>${nb.s.toFixed(2)}</text>`; });
+    neighbors.forEach((nb,i)=>{ const ang=(-90+(360/n)*i)*Math.PI/180; const R=radiusOf(nb.s); const nx=cx+Math.cos(ang)*R, ny=cy+Math.sin(ang)*R;
+      s+=`<g class="conode"${animate?' opacity="0"':''}><circle cx="${nx}" cy="${ny}" r="${4+nb.s*2}" fill="#1a1a1a" stroke="#555" stroke-width="1"/>`+
+         `<text x="${nx}" y="${ny-11}" fill="#c3c3c3" font-size="13" font-family="-apple-system,'PingFang SC',sans-serif" text-anchor="middle">${nb.w}</text></g>`; });
+    s+=`<circle cx="${cx}" cy="${cy}" r="26" fill="#000" stroke="${centerColor}" stroke-width="1.5"/>`+
+       `<text x="${cx}" y="${cy+5}" fill="#fff" font-size="14" font-family="-apple-system,'PingFang SC',sans-serif" font-weight="600" text-anchor="middle">${center}</text>`;
+    host.innerHTML=`<svg width="${W}" height="${H}" style="display:block">${s}</svg>`;
+    if(animate){
+      // smooth eased entrance: spokes grow from center outward, then nodes/labels fade in
+      requestAnimationFrame(()=>{
+        host.querySelectorAll('.cospoke').forEach(l=>{ l.style.transition='stroke-dashoffset .6s cubic-bezier(.22,.61,.36,1)'; l.style.strokeDashoffset='0'; });
+        setTimeout(()=>{ host.querySelectorAll('.conode').forEach(el=>{ el.style.transition='opacity .4s ease'; el.setAttribute('opacity','1'); }); }, 360);
+      });
+    }
+  }
+  const ro=new ResizeObserver(()=>draw(false)); ro.observe(host); // redraws on resize without re-animating
+  draw(firstDraw); firstDraw=false;
+}
+
+/* ====================================================================
+   STEPS — registry (narration ported verbatim from steps.jsx;
+   stages 1–4d match Claude Design; 5–8 port v4 logic onto this look)
+   ==================================================================== */
+const STEPS = [
+ { num:"0", stepOf:0, cover:true, kicker:"INTRODUCTION", title:"导言", en:"Introduction",
+   readouts:[{k:"topic",v:"RAG"},{k:"steps",v:"导言 + 8"},{k:"demo",v:"西湖"}], stage:"cover" },
+ { num:"1", stepOf:1, kicker:"CORPUS", title:"原文 · 知识库", en:"Source Documents",
+   lead:'这是机器要依靠的<b>全部资料</b>——十二条关于西湖的真实事实。',
+   body:'问答机器人不会凭空知道任何事。它能回答的，<strong>只有这里写下的内容</strong>。先把这篇长文读进来。',
+   note:'<span class="tag">真实</span>语料改编自维基百科「西湖」，按 CC BY-SA 署名。下文的分词、问题与答案均为真实内容。',
+   reality:'真实的知识库往往是<strong>成千上万篇</strong>文档——产品手册、维基条目、公司内部资料、网页……这里只用 12 句话，是为了让你看清全过程。<strong>模型预训练时见过的知识会过时、也可能记错；把权威资料放进知识库，就是给它一本"开卷考试"用的参考书。</strong>',
+   readouts:[{k:"doc",v:"12 句"},{k:"chars",v:String(TOTAL_CHARS)},{k:"source",v:"CC BY-SA"}], stage:"doc" },
+ { num:"2", stepOf:2, kicker:"CHUNKING", title:"分块", en:"Chunking",
+   lead:'机器先把文章<b>切成一句句小块</b>，方便以后一块块地查。',
+   body:'整篇文章太长，没法整体处理。于是按句子切成 <strong>C1–C12</strong> 十二个带编号的小块——之后的每一步，都是在和这些块打交道。',
+   note:'<span class="tag">真实</span>这里按句切分，每句一个 chunk。真实系统的分块策略会更复杂(按长度/重叠窗口)。',
+   reality:'实际分块通常按 <em>200–1000 字</em>一段、并让相邻块<strong>重叠</strong>几十字(overlap)，既保住完整语义、又能塞进模型有限的"上下文窗口"。<strong>分块切得好不好，直接决定后面能不能检索到对的内容</strong>——切碎了丢上下文，切太大又混入无关信息。',
+   readouts:[{k:"chunks",v:"12"},{k:"strategy",v:"按句"}], stage:"chunks" },
+ { num:"3", stepOf:3, kicker:"TOKENIZATION", title:"分词", en:"Tokenization",
+   lead:'中文没有空格，机器得先<b>切出一个个词</b>，才好理解。',
+   body:'取出 C6 这一句，把它切成一个个 token(词)。每个 token 是模型能"看见"的最小单位。<strong>数字和标点</strong>也各自成 token。',
+   note:'<span class="tag">真实</span>切词结果为示意分词。不同模型的分词器(tokenizer)会把同一句切得不太一样。',
+   reality:'真实模型不是按"词"、而是按 <strong>子词(subword)</strong> 切，常用算法有 <span class="hl">BPE / WordPiece / SentencePiece</span>；词表通常有 <em>3 万–15 万</em> 个 token。一个 token 大约是一个常见词或一个字片段。<strong>模型的计费、长度限制，都是按 token 数算的。</strong>',
+   readouts:[{k:"input",v:"C6"},{k:"tokens",v:"20"}], stage:"tokens" },
+ { num:"4a", stepOf:4, kicker:"EMBEDDING · 1/4", title:"为什么“意思”能变成数字?", en:"Distributional Hypothesis",
+   lead:'一个词的意思，藏在它<b>常和哪些词一起出现</b>里。',
+   quote:'“一个词的意思，藏在它常和哪些词一起出现里。”',
+   body:'在这篇文章里，<span class="hl">西湖</span>周围反复出现“杭州、湖、堤、景观”；<span class="rd">雷峰塔</span>周围是“倒塌、重建、塔”。两段文字如果总在相似的上下文里出现，意思就相近——这叫<strong>分布假说</strong>。只要把“一段文字常出现在怎样的上下文里”记成数字，就把“意思”变成了数字。',
+   note:'<span class="tag">示意</span>离中心越近 = 共现越强(强度数值为示意)。下方为语料中的真实句子佐证。',
+   reality:'这条直觉有句名言：<strong>"You shall know a word by the company it keeps."</strong>(Firth, 1957)。早期的 <span class="hl">Word2Vec(2013)、GloVe(2014)</span> 就是把这个思想做成了算法——靠"一个词周围常出现什么词"来给它定位。',
+   readouts:[{k:"mode",v:"共现"},{k:"centers",v:"2"}], stage:"cooc" },
+ { num:"4b", stepOf:4, kicker:"EMBEDDING · 2/4", title:"这些数字是“学”出来的", en:"Learned, Not Hand-Set",
+   lead:'模型靠玩一个<b>猜词游戏</b>，自己学出这些坐标。',
+   quote:'“模型靠玩一个猜词游戏，自己学出这些坐标。”',
+   body:'有一个神经网络(嵌入模型)读过海量文本，反复玩一个游戏：<strong>挡住一个词，猜它周围该是什么</strong>。为了猜得准，它被迫给每段文字分配一组坐标，让意思像的靠在一起、远的分开。训练完它就固定了——依据，就是“怎样的坐标能让‘猜上下文’做得最好”。',
+   note:'<span class="tag">示意</span>候选词与概率为示意演示，用以说明训练目标，并非真实模型输出。',
+   reality:'这其实就是模型的<strong>自监督预训练</strong>：<strong>BERT</strong> 玩"完形填空"(挡住中间的词去猜，Masked LM)；<strong>GPT</strong> 玩"猜下一个词"(Next-token)。猜词本质是在所有候选词上做一个概率分布，用 <span class="hl">softmax</span>：'
+     +'<div class="formula"><span class="lead">SOFTMAX · 把分数变成概率</span>'
+     +'P(目标词 | 上下文) = exp(<i>z</i><sub>t</sub>) <span class="op">/</span> Σ<sub>j</sub> exp(<i>z</i><sub>j</sub>)</div>'
+     +'现代嵌入模型(如 <strong>BGE、E5、OpenAI text-embedding</strong>)还会再用<strong>对比学习</strong>微调：把"该相似的"拉近、"不该相似的"推远。',
+   readouts:[{k:"task",v:"掩码猜词"},{k:"top-k",v:"6"}], stage:"guess" },
+ { num:"4c", stepOf:4, kicker:"EMBEDDING · 3/4", title:"几百个维度 = 几百条隐藏特征", en:"Hundreds of Hidden Axes",
+   lead:'每一维，都是模型自己摸索出的<b>一条打分轴</b>。',
+   quote:'“每一维，都是模型自己摸索出的一条打分轴。”',
+   body:'这串数字有几百个(常见 <span class="hl">384</span> 或 768)。可粗略理解为：每一维是一条“打分轴”——这段话有多“关于水”、多“关于地点”、多“关于历史”…… 一段文字的向量，就是它在这几百条轴上的打分。把两句意思相近的话画成热力图，<strong>花纹相似 → 向量相近</strong>。',
+   note:'<span class="tag">示意</span>这些轴没有人起名字，是模型自己摸出来的；颜色深浅=分量大小(示意)。',
+   reality:'真实嵌入的维度常见是 <span class="hl">384 / 768 / 1024 / 1536 / 3072</span> 维——也就是每段文字会变成<strong>这么多个数字</strong>。我们这里<em>只画 2 维</em>，纯粹是为了"看得见"；<strong>1024 维根本无法在一张平面图里展示</strong>。而且这些维度并没有"水/地点/历史"这样的人类名字，是模型自己学出来的，这里的轴名只是为了直观。',
+   readouts:[{k:"dim",v:"384"},{k:"cosine",v:D.heat.sim.toFixed(3)}], stage:"heat" },
+ { num:"4d", stepOf:4, kicker:"EMBEDDING · 4/4", title:"于是“意思”成了确定的坐标", en:"A Fixed Point in Space",
+   lead:'同一段文字，永远得到同一串数字——意思被<b>钉成了确定的点</b>。',
+   quote:'“同一段文字，永远得到同一串数字。”',
+   body:'模型训练好后参数就不变，于是同一段文字喂进去，永远得到同一组数字——<strong>确定、可复现</strong>。“意思”这个抽象的东西，被钉成了高维空间里一个确定的点。两段话有多像，就看它们的点离得多近——这就是<strong>余弦相似度</strong>，下一步检索全靠它。',
+   note:'<span class="tag">示意</span>位置只表示意思的远近；这是高维压扁的 2D 示意。真实系统用 384 维余弦相似度。',
+   reality:'两段文字的向量，用<strong>余弦相似度</strong>衡量有多像——只看<strong>方向(语义)</strong>、不受文本长短影响：'
+     +'<div class="formula"><span class="lead">COSINE SIMILARITY · 余弦相似度</span>'
+     +'cos(<i>A</i>, <i>B</i>) = (<i>A</i> <span class="op">·</span> <i>B</i>) / (‖<i>A</i>‖ <span class="op">·</span> ‖<i>B</i>‖) '
+     +'= Σ<sub>i</sub> <i>A</i><sub>i</sub><i>B</i><sub>i</sub> / ( √Σ<sub>i</sub> <i>A</i><sub>i</sub><sup>2</sup> <span class="op">·</span> √Σ<sub>i</sub> <i>B</i><sub>i</sub><sup>2</sup> )'
+     +'<span class="rng">取值范围 [−1, 1]：越接近 <strong>1</strong> 意思越像，<strong>0</strong> 基本无关，<strong>−1</strong> 相反。</span></div>'
+     +'<strong>注意：我们图里用的是 <em>2D 平面距离</em>来演示"近=像"，真实系统是在 1024 维里算上面这个余弦公式。</strong>',
+   readouts:[{k:"dim",v:"384"},{k:"coord",v:"("+D.coords2d.C4.x.toFixed(2)+","+D.coords2d.C4.y.toFixed(2)+")"},{k:"cosine",v:"下一步"}], stage:"landing" },
+ { num:"5", stepOf:5, kicker:"INDEX", title:"入库 · 索引", en:"Index",
+   lead:'把 12 段文字的坐标<b>存进向量库</b>，这张“意思地图”就是索引。',
+   body:'每个 chunk 都变成一行数字(它的向量)，整齐排进库里——左边是 12 条<strong>向量热力矩阵</strong>。再把它们按坐标画到一张<strong>2D 意思地图</strong>上：意思近的句子，点也聚在一起。以后查找，就在这张图上找最近的点。',
+   note:'<span class="tag">示意</span>向量分量与 2D 位置均为示意;这是高维压扁的 2D 示意，位置只表示意思的远近。',
+   reality:'真实向量库(<span class="hl">FAISS、Milvus、pgvector、Pinecone、Qdrant</span> 等)能存<strong>百万到十亿</strong>条向量。为了不必逐条比较，它们用<strong>近似最近邻(ANN)</strong>索引(如 <strong>HNSW</strong>)，在海量向量里<em>毫秒级</em>找出最像的几条。我们这张 2D"意思地图"只是它的卡通示意。',
+   readouts:[{k:"chunks",v:"12"},{k:"dim",v:"384"}], stage:"index" },
+ { num:"6", stepOf:6, kicker:"QUERY", title:"提问 → 问题向量化", en:"Query Embedding",
+   lead:'问题也要<b>走一遍同样的流程</b>，变成它自己的一个坐标。',
+   body:'用户问：「<strong>'+D.question+'</strong>」。这句话同样先分词、再变成 384 维向量，最后落成意思地图上的一个<span class="hl">蓝色点</span>。只有变成同一种坐标，才能和库里的 12 个点比较远近。',
+   note:'<span class="tag">真实</span>问题文本为真实内容;其向量与坐标为示意(与语料同一套示意嵌入)。',
+   reality:'关键点：问题必须用<strong>和文档同一个嵌入模型</strong>来编码，才能落在<strong>同一个向量空间</strong>里，两者才可比较。<em>问不对模型、或换了模型，坐标就对不上、也就查不准。</em>',
+   readouts:[{k:"input",v:"问题"},{k:"dim",v:"384"}], stage:"query" },
+ { num:"7", stepOf:7, kicker:"RETRIEVAL", title:"检索", en:"Retrieval",
+   lead:'在地图上找<b>离问题最近的句子</b>——离得越近，意思越像。',
+   body:'机器把问题的点和 12 个 chunk 逐一算距离，排出最像的几句。<strong>C6(雷峰塔)</strong> 离得最近，被选为命中。试着<span class="hl">拖动蓝色“问题”点</span>，排名和连线会实时重算——用手感受“近=意思像”。',
+   note:'<span class="tag">示意</span>此处相似度按 2D 地图距离实时计算，用于演示“近=像”;真实系统用 384 维余弦相似度。',
+   reality:'真实检索会取<strong>最相似的前 k 条</strong>(top-k，常取 <em>3–10</em>)，有时再用一个更精的 <span class="hl">重排模型(reranker)</span> 复查一遍提高准确率。<strong>取多少、排得准不准，直接影响最终答案质量。</strong>',
+   readouts:[{k:"chunks",v:"12"},{k:"cosine",v:"—"}], stage:"retrieval" },
+ { num:"8", stepOf:8, kicker:"GENERATION", title:"生成答案", en:"Generation · RAG",
+   lead:'把<b>找到的句子</b>和你的问题一起交给模型，让它用自己的话回答。',
+   body:'检索到的 C6 和问题被拼进一段提示词(prompt)：<strong>[系统] + [资料 C6] + [问题]</strong>。模型只依据这段资料作答，流式吐出答案。这套“<strong>先检索、再回答</strong>”的办法，就叫 <span class="hl">RAG</span>。',
+   note:'<span class="tag">真实</span>问题与答案为真实内容。下一课预告:若库里没有相关资料，模型可能“硬编”答案——那就是“幻觉”。',
+   reality:'把检索到的资料拼进提示词(prompt)当<strong>上下文</strong>，模型据此作答——这就是 <span class="hl">RAG：Retrieval-Augmented Generation</span>(Lewis et al., 2020)。它的三大好处：<strong>① 少幻觉</strong>(有据可依)、<strong>② 知识可更新</strong>(换知识库即可，不必重训模型)、<strong>③ 可溯源</strong>(能标出答案来自哪篇)。<br><span style="color:var(--ink-faint)">下一课预告：如果知识库里<strong>根本没有</strong>相关资料，模型可能会<em>自信地编一个</em>——那就是"幻觉"。</span>',
+   readouts:[{k:"context",v:"C6"},{k:"mode",v:"RAG"}], stage:"generation" },
+];
+
+/* ====================================================================
+   STAGE RENDERERS  (return DOM into the given stageEl; honor replayKey via re-call)
+   ==================================================================== */
+let timers=[]; let activeScatter=null; let q7=null;
+function clearTimers(){ timers.forEach(t=>clearTimeout(t)); timers=[]; }
+function after(ms,fn){ timers.push(setTimeout(fn,ms)); }
+
+const STAGES = {
+ cover(el){
+   el.innerHTML=`<div class="cover fade-step"><div class="cover__inner">
+     <div class="cover__kicker">慢读向量化 · SLOW-READ EMBEDDING<span class="bar"></span></div>
+     <h1 class="cover__title">慢读向量化</h1>
+     <p class="cover__sub">模型究竟是怎么知道一个问题的答案的?</p>
+     <div class="cover__body">
+       <p>你问 AI 一个问题，它张口就答。可它是<strong>真"知道"</strong>，还是<strong>临时去查的</strong>?</p>
+       <p>今天大量 AI 问答、客服、搜索的背后，用的是一套叫 <span class="hl">RAG(检索增强生成)</span> 的办法：先去一个知识库里<strong>查到相关资料</strong>，再带着资料<strong>回答</strong>。这能让模型少编瞎话(幻觉)、知识能随时更新、答案还能溯源。</p>
+       <p>难点在于：计算机并不"读懂"文字，它只会算数字。那么——一句话的<strong>意思</strong>，是怎么变成数字、被存起来、又被一个问题精确找到的?</p>
+       <p>这个演示用一篇真实的<strong>杭州西湖</strong>短文当例子，带你一步步、放慢了看完整个过程：<span class="cover__pipe">分词 → 变成向量 → 存进向量库 → 检索 → 生成答案</span></p>
+     </div>
+     <div class="cover__note"><span class="tag">诚实提示</span><span>为了能在屏幕上画出来，我们把高维向量压成了<strong>二维平面</strong>。真实的向量有几百到几千维(常见 1024 维)，人眼根本画不出、也想象不来——但背后的道理完全一样。</span></div>
+     <div class="cover__cta"><button id="coverStart">开始 →</button></div>
+   </div></div>`;
+   const b=document.getElementById('coverStart'); if(b) b.onclick=()=>go(idx+1);
+ },
+ doc(el){
+   const article=D.chunks.map(c=>c.text).join("");
+   el.innerHTML=`<div class="stage__inner fade-step" style="flex-direction:column">
+     <div class="docpanel" style="padding:26px 30px">
+       <div class="doc-text" style="font-size:16px;line-height:2.05;text-indent:2em;text-align:justify">${withMono(article)}</div>
+     </div>
+     <div class="docfoot"><span class="lic">CC BY-SA</span><span>语料改编自维基百科「西湖」条目 · 真实内容</span></div>
+   </div>`;
+ },
+ chunks(el){
+   el.innerHTML=`<div class="stage__inner fade-step" style="flex-direction:column;overflow-y:auto">
+     <div class="chunkgrid">${D.chunks.map((c,i)=>
+       `<div class="chunk" style="animation-delay:${i*0.07}s"><div class="chunk__id">${c.id}</div><div class="chunk__t">${withMono(c.text)}</div></div>`).join('')}</div>
+   </div>`;
+ },
+ tokens(el){
+   const toks=D.tokensC6; const c6=sentenceOf("C6");
+   const charCount=c6.replace(/\s/g,"").length; const tokWords=toks.filter(t=>t.y!=="punct").length;
+   el.innerHTML=`<div class="stage__inner fade-step" style="flex-direction:column;gap:16px">
+     <div style="font-family:var(--mono);font-size:12px;color:var(--ink-faint);letter-spacing:.04em">原句 · C6 ——「${c6}」</div>
+     <div class="tokwrap"><div class="tokline">${toks.map((t,i)=>
+       `<span class="tok ${t.y==='num'?'is-num':t.y==='punct'?'is-punct':''}" style="animation-delay:${0.25+i*0.09}s"><span class="tok__t">${t.t}</span>${t.y!=='punct'?`<span class="tok__i">${i+1}</span>`:''}</span>`).join('')}</div></div>
+     <div style="display:flex;gap:22px;font-family:var(--mono);font-size:12px;color:var(--ink-soft)">
+       <span>字符数 <b style="color:#222">${charCount}</b></span>
+       <span>token 数 <b style="color:var(--blue)">${tokWords}</b></span>
+       <span style="color:var(--ink-faint)">标点不计入语义 token</span></div>
+   </div>`;
+ },
+ cooc(el){
+   const [xihu,leifeng]=D.cooccurrence;
+   function evid(co,color){
+     const sent=sentenceOf(co.sentences[0]); const words=[co.center,...co.neighbors.map(n=>n.w)];
+     const re=new RegExp("("+words.map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|")+")","g");
+     const parts=sent.split(re);
+     return `<div class="evid"><span class="cid">${co.sentences[0]}</span>`+parts.map(p=>{
+       if(p===co.center) return `<span style="color:${color};font-weight:600">${p}</span>`;
+       if(co.neighbors.some(n=>n.w===p)) return `<span style="color:#ff4740">${p}</span>`;
+       return p; }).join('')+`</div>`;
+   }
+   el.innerHTML=`<div class="canvas fade-step">
+     <div class="canvas__corner tl">mode: 共现统计 · co-occurrence</div>
+     <div class="canvas__corner tr">window: ±句 · 示意强度 0–1</div>
+     <div style="position:absolute;inset:0;padding:30px 26px 18px;display:flex;flex-direction:column">
+       <div class="cograph-wrap" style="flex:1">
+         <div class="cocol"><div class="cocol__head"><span class="swatch" style="background:#1e6fff"></span>“西湖” 的上下文邻居</div>
+           <div class="cocol__svg" id="co-xihu"></div>${evid(xihu,"#5d96ff")}</div>
+         <div style="width:1px;background:#2a2a2a"></div>
+         <div class="cocol"><div class="cocol__head"><span class="swatch" style="background:#ff4740"></span>“雷峰塔” 的上下文邻居</div>
+           <div class="cocol__svg" id="co-leifeng"></div>${evid(leifeng,"#ff7a74")}</div>
+       </div></div></div>`;
+   CoGraph(el.querySelector('#co-xihu'), xihu.center, xihu.neighbors, "blue");
+   CoGraph(el.querySelector('#co-leifeng'), leifeng.center, leifeng.neighbors, "red");
+ },
+ guess(el){
+   const g=D.maskGame; const max=Math.max(...g.candidates.map(c=>c.p));
+   el.innerHTML=`<div class="canvas fade-step">
+     <div class="canvas__corner tl">task: 掩码猜词 · masked LM</div>
+     <div class="canvas__corner tr">top-k: ${g.candidates.length} · 概率为示意</div>
+     <div class="guess">
+       <div class="guess__sentence">${g.pre.map(w=>`<span class="w">${w}</span>`).join('')}
+         <span class="guess__blank" id="blank">?</span>
+         ${g.post.map(w=>`<span class="w">${w}</span>`).join('')}</div>
+       <div class="candbars">${g.candidates.map((c,i)=>
+         `<div class="cand" id="cand${i}"><div class="cand__w">${c.w}</div>
+           <div class="cand__track"><div class="cand__fill" id="fill${i}"></div></div>
+           <div class="cand__p">${(c.p*100).toFixed(0)}%</div></div>`).join('')}</div>
+     </div></div>`;
+   after(180, ()=> g.candidates.forEach((c,i)=>{ const f=document.getElementById('fill'+i); if(f) f.style.width=((c.p/max)*100)+'%'; }));
+   after(1300, ()=>{ const b=document.getElementById('blank'); if(b){ b.textContent=g.answer; b.classList.add('is-filled'); } const c0=document.getElementById('cand0'); if(c0) c0.classList.add('is-top'); });
+ },
+ heat(el){
+   const h=D.heat; const nameOf=id=>sentenceOf(id);
+   el.innerHTML=`<div class="canvas fade-step">
+     <div class="canvas__corner tl">dim: ${D.DIM} · 每维=一条学出来的打分轴(无名,示意)</div>
+     <div class="canvas__corner tr">value → alpha · 单色编码</div>
+     <div class="heatwrap">
+       <div class="heatrow">
+         <div class="heatrow__label"><span class="name"><span class="tag">${h.aName}</span>${nameOf(h.aName)}</span><span>${D.DIM} 维</span></div>
+         <div style="width:100%"><canvas class="heat-canvas" id="heatA"></canvas></div>
+         <div class="heataxis"><span>维度 1</span><span>${D.DIM}</span></div></div>
+       <div class="heatrow" id="rowB" style="opacity:0;transition:opacity .5s cubic-bezier(.22,.61,.36,1)">
+         <div class="heatrow__label"><span class="name"><span class="tag">${h.bName}</span>${nameOf(h.bName)}</span><span>${D.DIM} 维</span></div>
+         <div style="width:100%"><canvas class="heat-canvas" id="heatB"></canvas></div>
+         <div class="heataxis"><span>维度 1</span><span>${D.DIM}</span></div></div>
+       <div class="heatsim" id="heatsim" style="opacity:0;transition:opacity .5s cubic-bezier(.22,.61,.36,1)">
+         花纹相似 → 向量相近 · 余弦相似度 <b>${h.sim.toFixed(3)}</b><span style="color:#6f6f6f;margin-left:10px">(示意)</span></div>
+     </div></div>`;
+   requestAnimationFrame(()=>{ paintHeat(document.getElementById('heatA'), h.a); paintHeat(document.getElementById('heatB'), h.b); });
+   after(700, ()=>{ const r=document.getElementById('rowB'), s=document.getElementById('heatsim'); if(r)r.style.opacity='1'; if(s)s.style.opacity='1'; });
+ },
+ landing(el){
+   const h=D.heat; const pt=D.coords2d[h.aName];
+   el.innerHTML=`<div class="canvas fade-step" style="display:flex;flex-direction:column">
+     <div class="canvas__corner tl" style="z-index:6">dim: ${D.DIM} → 2D 投影(高维压扁的示意)</div>
+     <div class="canvas__corner tr" style="z-index:6">coord: (${pt.x.toFixed(2)}, ${pt.y.toFixed(2)}) · 确定可复现</div>
+     <div id="lrow" style="flex:0 0 auto;max-height:64px;opacity:1;overflow:hidden;transition:max-height .6s cubic-bezier(.22,.61,.36,1),opacity .6s;padding:16px 30px 4px">
+       <div class="heatrow__label" style="margin-bottom:6px"><span class="name"><span class="tag">${h.aName}</span>${sentenceOf(h.aName)}</span><span>${D.DIM} 维 → 收缩为一个点</span></div>
+       <div style="width:100%"><canvas class="heat-canvas" id="heatL" style="height:28px"></canvas></div></div>
+     <div style="flex:1;min-height:0;padding:8px 8px 4px"><div class="scatter-host" id="lscatter"></div></div>
+   </div>`;
+   requestAnimationFrame(()=> paintHeat(document.getElementById('heatL'), h.a, 28));
+   const point={ id:h.aName, x:pt.x, y:pt.y, label:h.aName, tone:"red", full:sentenceOf(h.aName) };
+   activeScatter=Scatter(el.querySelector('#lscatter'), { points:[point], pinnedId:null });
+   after(800, ()=>{ const r=document.getElementById('lrow'); if(r){ r.style.maxHeight='0'; r.style.opacity='0'; r.style.padding='0 30px'; } if(activeScatter) activeScatter.setPinned(h.aName); });
+ },
+
+ /* -------- step 5: index (heat matrix + 2D map), data-driven -------- */
+ index(el){
+   const ids=D.chunks.map(c=>c.id);
+   el.innerHTML=`<div class="canvas fade-step" style="display:flex">
+     <div class="canvas__corner tl" style="z-index:6">vectors: 12 × ${D.DIM} · 单色红编码分量</div>
+     <div class="canvas__corner tr" style="z-index:6">高维压扁的 2D 示意</div>
+     <div style="position:absolute;inset:0;padding:30px 22px 16px;display:flex">
+       <div class="idx-wrap">
+         <div class="idx-col" style="flex:0 0 300px">
+           <div class="idx-col__head">向量热力矩阵 · 12 × ${D.DIM}</div>
+           <div class="matrix" id="matrix">${ids.map(id=>
+             `<div class="matrix__row"><span class="matrix__id">${id}</span><canvas class="matrix__cells" id="mx-${id}"></canvas></div>`).join('')}</div>
+         </div>
+         <div style="width:1px;background:#2a2a2a"></div>
+         <div class="idx-col" style="flex:1">
+           <div class="idx-col__head">2D 意思地图 · 12 点(悬停看句子 · 点击钉坐标)</div>
+           <div style="flex:1;min-height:0"><div class="scatter-host" id="idxscatter"></div></div>
+         </div>
+       </div></div></div>`;
+   // paint each chunk's vector as a heat row (data-driven: vecFor(text))
+   requestAnimationFrame(()=> ids.forEach(id=>{ const cv=document.getElementById('mx-'+id); if(cv) paintHeat(cv, D.vecFor(sentenceOf(id), D.DIM), 15); }));
+   const points=ids.map(id=>({ id, x:D.coords2d[id].x, y:D.coords2d[id].y, label:id, tone:"gray", full:sentenceOf(id) }));
+   let pinned=null;
+   activeScatter=Scatter(el.querySelector('#idxscatter'), { points, onPin:id=>{pinned=id;} });
+ },
+
+ /* -------- step 6: query → tokenize → vectorize → coord -------- */
+ query(el){
+   el.innerHTML=`<div class="canvas fade-step">
+     <div class="canvas__corner tl">query embed · 与语料同一套嵌入</div>
+     <div class="canvas__corner tr">dim: ${D.DIM}</div>
+     <div class="pipe">
+       <div class="pipe__box" id="p0" style="max-width:560px"><span class="bh">你的问题 · 真实</span>${D.question}</div>
+       <div class="pipe__row">
+         <div class="pipe__box" id="p1"><span class="bh">分词</span>雷峰塔 / 是 / 什么 / 时候 / 倒掉 / 又 / 重建</div>
+         <span class="pipe__arrow" id="a1">→</span>
+         <div class="pipe__box" id="p2"><span class="bh">向量化 · ${D.DIM} 维(示意)</span>[0.79, -0.18, 0.60, …]</div>
+         <span class="pipe__arrow" id="a2">→</span>
+         <div class="pipe__box qcoord" id="p3"><span class="bh">问题坐标</span>● (${D.questionCoord.x.toFixed(2)}, ${D.questionCoord.y.toFixed(2)}) · 蓝色点</div>
+       </div></div></div>`;
+   ['p0','p1','a1','p2','a2','p3'].forEach((id,i)=> after(200+i*340, ()=>{ const e=document.getElementById(id); if(e) e.classList.add('in'); }));
+ },
+
+ /* -------- step 7: retrieval — draggable question, live re-rank (v4 logic) -------- */
+ retrieval(el){
+   const ids=D.chunks.map(c=>c.id);
+   if(!q7) q7={ q:{x:D.questionCoord.x, y:D.questionCoord.y} };
+   const MAXD=Math.hypot(2.3,2.3); // domain span ~[-1.15,1.15]
+   const sim2d=(c)=> Math.max(0, 1 - Math.hypot(c.x-q7.q.x, c.y-q7.q.y)/MAXD);
+   el.innerHTML=`<div class="canvas fade-step" style="display:flex;flex-direction:column">
+     <div class="canvas__corner tl" style="z-index:6">retrieval · 2D 距离实时计算</div>
+     <div class="canvas__corner tr" style="z-index:6">高维压扁的 2D 示意</div>
+     <div style="position:absolute;inset:0;padding:30px 22px 14px;display:flex;gap:18px">
+       <div style="flex:1;min-height:0;display:flex;flex-direction:column">
+         <div class="idx-col__head">2D 意思地图 · 拖动蓝色“问题”点</div>
+         <div style="flex:1;min-height:0"><div class="scatter-host" id="rscatter"></div></div>
+         <div class="maphint" style="margin-top:8px">拖动“问题”点，看排名实时变化 <span class="reset-chip" id="rreset">↺ 复位</span></div>
+       </div>
+       <div style="width:1px;background:#2a2a2a"></div>
+       <div style="flex:0 0 320px;display:flex;flex-direction:column;min-height:0">
+         <div class="idx-col__head">相似度排名 · 降序(2D 距离 → 相似度)</div>
+         <div class="rank" id="rank" style="overflow-y:auto"></div>
+       </div></div></div>`;
+   const host=el.querySelector('#rscatter'); const rankEl=el.querySelector('#rank');
+   function compute(){
+     const scored=ids.map(id=>{ const c=D.coords2d[id]; return {id, x:c.x, y:c.y, s:sim2d(c)}; }).sort((a,b)=>b.s-a.s);
+     const top=scored[0].id; const maxS=scored[0].s||1;
+     const points=scored.map(d=>({ id:d.id, x:d.x, y:d.y, label:d.id, tone:d.id===top?"red":"gray", sim:d.s, full:sentenceOf(d.id) }));
+     points.push({ id:"Q", x:q7.q.x, y:q7.q.y, label:"问题", tone:"blue" });
+     return {scored, top, maxS, points};
+   }
+   function renderRank(scored, top, maxS){
+     rankEl.innerHTML=scored.map(d=>`<div class="rank__row ${d.id===top?'is-top':''}">
+       <span class="rank__lbl">${d.id} · ${sentenceOf(d.id).slice(0,8)}…</span>
+       <span class="rank__track"><span class="rank__fill" style="width:${(d.s/maxS)*100}%"></span></span>
+       <span class="rank__p">${d.s.toFixed(2)}</span></div>`).join('');
+   }
+   function setReadout(maxS){ const v=document.querySelector('.readouts .readout:last-child .readout__v'); if(v) v.textContent=maxS.toFixed(2); }
+   let st=compute();
+   activeScatter=Scatter(host, { points:st.points, connectFrom:"Q", draggableId:"Q",
+     onDrag:(x,y)=>{ q7.q.x=x; q7.q.y=y; const s=compute(); activeScatter.update({points:s.points}); renderRank(s.scored,s.top,s.maxS); setReadout(s.maxS); },
+     onPin:()=>{} });
+   renderRank(st.scored, st.top, st.maxS); setReadout(st.maxS);
+   el.querySelector('#rreset').addEventListener('click', ()=>{ q7.q.x=D.questionCoord.x; q7.q.y=D.questionCoord.y; const s=compute(); activeScatter.update({points:s.points}); renderRank(s.scored,s.top,s.maxS); setReadout(s.maxS); });
+ },
+
+ /* -------- step 8: generation — prompt assembly + streamed answer -------- */
+ generation(el){
+   el.innerHTML=`<div class="canvas fade-step">
+     <div class="canvas__corner tl">prompt assembly · RAG</div>
+     <div class="canvas__corner tr">context: C6 · cosine 0.87(示意)</div>
+     <div class="gen">
+       <div class="asm">
+         <div class="blk sys" id="b0"><span class="bh">[系统]</span>你是西湖知识助手，只根据提供的资料回答，不要编造。</div>
+         <div class="blk ctx" id="b1"><span class="bh">[检索到的资料 · C6]</span>${sentenceOf("C6")}</div>
+         <div class="blk q" id="b2"><span class="bh">[问题]</span>${D.question}</div>
+       </div>
+       <div class="answer-box" id="ansbox"><span id="anst"></span><span class="cur" id="anscur">▍</span></div>
+       <div class="rag-note" id="ragnote" style="opacity:0;transition:opacity .5s">这套“先检索、再回答”的办法，就叫 <b>RAG</b>。</div>
+     </div></div>`;
+   ['b0','b1','b2'].forEach((id,i)=> after(200+i*420, ()=>{ const e=document.getElementById(id); if(e) e.classList.add('in'); }));
+   after(1700, ()=>{ const box=document.getElementById('ansbox'); if(box) box.classList.add('in'); stream(D.answer); });
+ },
+};
+
+function stream(text){
+  const el=document.getElementById('anst'), cur=document.getElementById('anscur');
+  let i=0;
+  const tick=()=>{ if(i>=text.length){ if(cur) cur.style.display='none'; const n=document.getElementById('ragnote'); if(n) n.style.opacity='1'; return; }
+    if(el) el.textContent+=text[i++]; timers.push(setTimeout(tick,110)); };
+  tick();
+}
+
+/* ====================================================================
+   SHELL + NAV (vanilla port of app.jsx)
+   ==================================================================== */
+const MAIN=8;
+let idx=0;
+const root=document.getElementById('root');
+
+function subsOfStep(sn){ return STEPS.filter(s=>s.stepOf===sn); }
+
+function build(){
+  root.innerHTML=`<div class="app">
+    <div class="topbar">
+      <div class="brand"><span class="brand__mark">RAG · 01</span><span class="brand__name">慢读向量化</span><span class="brand__sub">/ 一段文字如何变成数字</span></div>
+      <div class="topbar__spacer"></div>
+      <div class="stepind" id="stepind"></div>
+      <div class="readouts" id="readouts"></div>
+      <div class="livetoggle" title="后续接入真实嵌入 + 真实模型"><span class="dot"></span>LIVE<span class="pill">关 · 预留</span></div>
+    </div>
+    <div class="body">
+      <aside class="rail" id="rail"></aside>
+      <main class="stage">
+        <div class="stage__head"><span class="stage__label" id="stagelabel"></span>
+          <div class="stage__meta" id="stagemeta"></div></div>
+        <div id="stagebody" style="flex:1;min-height:0;display:flex;flex-direction:column"></div>
+      </main>
+    </div>
+    <div class="footer">
+      <button class="nav-btn" id="prevBtn"><span class="k">←</span> 上一步</button>
+      <button class="nav-btn ghost" id="replayBtn">↺ 重播本步</button>
+      <div class="progress" id="progress"></div>
+      <div class="seglabel" id="seglabel"></div>
+      <button class="nav-btn primary" id="nextBtn">下一步 <span class="k">→</span></button>
+    </div>
+  </div>`;
+  document.getElementById('prevBtn').onclick=()=>go(idx-1);
+  document.getElementById('nextBtn').onclick=()=>go(idx+1);
+  document.getElementById('replayBtn').onclick=()=>render();
+  render();
+}
+
+function render(){
+  clearTimers();
+  if(activeScatter && activeScatter.destroy){ activeScatter.destroy(); activeScatter=null; }
+  const step=STEPS[idx];
+  const isCover=!!step.cover;
+  const curSubs=subsOfStep(step.stepOf);
+  const curSubIdx=curSubs.findIndex(s=>s.num===step.num);
+
+  // step indicator
+  document.getElementById('stepind').innerHTML= isCover
+    ? `<span style="color:var(--blue)">导言 · INTRODUCTION</span><span>· 共 ${MAIN} 步</span>`
+    : `<span>第 <b>${step.stepOf}</b> / ${MAIN} 步</span>`+
+      (curSubs.length>1?`<span style="color:var(--blue)">· ${step.num.toUpperCase()}（${curSubIdx+1}/${curSubs.length}）</span>`:'');
+  // readouts
+  document.getElementById('readouts').innerHTML=step.readouts.map(r=>
+    `<div class="readout"><span class="readout__k">${r.k}</span><span class="readout__v">${r.v}</span></div>`).join('');
+  // rail
+  if(isCover){
+    document.getElementById('rail').innerHTML=
+      `<div class="rail__kicker"><span class="num">导言</span><span class="bar"></span><span>INTRODUCTION</span></div>
+       <h1 class="rail__title">从一个问题开始<span class="en">How does it know the answer?</span></h1>
+       <p class="rail__lead">这是一次<b>放慢的导览</b>——看清一句话如何变成数字，又如何被找到。</p>
+       <p class="rail__body">右侧是导言。点 <strong>「开始 →」</strong>(或下一步)进入第 1 步：原文 · 知识库。全程共 <strong>8 步</strong>，"向量化"拆成 4 个子步。</p>
+       <div class="rail__foot"><div class="note"><span class="tag">提示</span>每一步右栏(或旁白下方)都有一块「实际情况 · REALITY」补充框，讲背后的真实工程与数学，愿意深入再看。</div></div>`;
+  } else {
+    document.getElementById('rail').innerHTML=
+      `<div class="rail__kicker"><span class="num">STEP ${step.num.toUpperCase()}</span><span class="bar"></span><span>${step.kicker}</span></div>
+       <h1 class="rail__title">${step.title}<span class="en">${step.en}</span></h1>
+       <p class="rail__lead">${step.lead}</p>
+       ${step.quote?`<div class="rail__quote">${step.quote}</div>`:''}
+       ${step.body?`<p class="rail__body">${step.body}</p>`:''}
+       ${step.reality?`<div class="reality"><div class="reality__lab"><span class="sq"></span>实际情况 <span class="en">· REALITY</span></div><div class="reality__body">${step.reality}</div></div>`:''}
+       <div class="rail__foot"><div class="note">${step.note}</div></div>`;
+  }
+  // stage head
+  document.getElementById('stagelabel').textContent= isCover ? '导言 · INTRODUCTION' : `${step.kicker} · ${step.title}`;
+  document.getElementById('stagemeta').innerHTML= isCover ? `<span>RAG · 检索增强生成</span>`
+    : (step.stepOf<=3 || step.stepOf===6 || step.stepOf===8
+      ? `<span>含真实内容</span>` : `<span style="color:var(--ink-faint)">※ 含示意数值（界面已标注）</span>`);
+  // footer
+  document.getElementById('prevBtn').disabled = idx===0;
+  const nb=document.getElementById('nextBtn'); nb.disabled = idx===STEPS.length-1;
+  document.getElementById('seglabel').innerHTML= isCover ? `导言 · <b>0</b>` : `${step.title} · <b>${step.num.toUpperCase()}</b>`;
+  let prog='';
+  for(let sn=1;sn<=MAIN;sn++){
+    const done=sn<step.stepOf, isCur=sn===step.stepOf;
+    let fill = done?1 : (isCur ? (curSubs.length>1?(curSubIdx+1)/curSubs.length:1) : 0);
+    prog+=`<div class="seg ${done?'done':''}" data-sn="${sn}" title="第 ${sn} 步"><div class="fill" style="transform:scaleX(${fill})"></div></div>`;
+  }
+  document.getElementById('progress').innerHTML=prog;
+  document.querySelectorAll('#progress .seg').forEach(seg=>{
+    seg.onclick=()=>{ const sn=+seg.dataset.sn; const t=STEPS.findIndex(s=>s.stepOf===sn); if(t>=0) go(t); };
+  });
+  // stage body
+  const stageBody=document.getElementById('stagebody');
+  stageBody.innerHTML='';
+  STAGES[step.stage](stageBody);
+}
+
+function go(n){ const v=Math.max(0,Math.min(STEPS.length-1,n)); if(v!==idx){ idx=v; render(); } }
+
+/* screenshot hooks */
+function goToScreen(id){ const key=String(id)==='cover'?'0':String(id); const i=STEPS.findIndex(s=>s.num===key); if(i>=0){ idx=i; render(); } }
+function goToStep(n){ goToScreen(String(n)); }   // '0'/'cover' for intro; main step 1..8; for step 4 use '4a'..'4d'
+function setQuestion(x,y){ if(STEPS[idx].num!=='7') return; if(!q7) q7={q:{}}; q7.q.x=x; q7.q.y=y; render(); }
+window.goToScreen=goToScreen; window.goToStep=goToStep; window.setQuestion=setQuestion;
+window.nextStep=()=>go(idx+1); window.prevStep=()=>go(idx-1); window.replayStep=()=>render();
+
+// keyboard
+window.addEventListener('keydown', e=>{ if(e.key==='ArrowRight') go(idx+1); else if(e.key==='ArrowLeft') go(idx-1); else if(e.key==='r'||e.key==='R') render(); });
+
+build();
+</script>
+</body>
+</html>
