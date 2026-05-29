@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>慢读向量化</title>
 <style>
 /* ===== 《慢读向量化》 instrument aesthetic — ported from Claude Design styles.css =====
@@ -107,6 +107,12 @@ body{margin:0;font-family:var(--sans);background:var(--bg);color:var(--ink);font
 .cover__note{margin:24px 0 0;display:flex;gap:10px;align-items:flex-start;font-family:var(--mono);font-size:11px;line-height:1.65;color:var(--ink-faint);border:1px dashed var(--border);border-radius:4px;padding:12px 14px;background:var(--panel-2);}
 .cover__note .tag{flex:0 0 auto;color:var(--ink-soft);border:1px solid var(--border);border-radius:2px;padding:1px 6px;letter-spacing:.08em;}
 .cover__note strong{color:var(--ink-soft);font-weight:650;}
+/* compact glossary box on cover (先认两个词) */
+.cover__gloss{margin:18px 0 0;border:1px solid var(--border);border-left:2px solid var(--blue);border-radius:0 4px 4px 0;background:#fff;padding:11px 14px;}
+.cover__gloss .gh{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:7px;}
+.cover__gloss dl{margin:0;display:flex;flex-direction:column;gap:5px;}
+.cover__gloss .row{font-size:13px;line-height:1.6;color:var(--ink-soft);}
+.cover__gloss .row b{color:var(--ink);font-weight:650;}
 .cover__cta{margin:28px 0 0;}
 .cover__cta button{font-family:var(--sans);font-size:15px;font-weight:600;padding:13px 30px;border-radius:3px;border:1px solid var(--blue);background:var(--blue);color:#fff;cursor:pointer;transition:background var(--t);}
 .cover__cta button:hover{background:#1862e6;}
@@ -209,11 +215,20 @@ body{margin:0;font-family:var(--sans);background:var(--bg);color:var(--ink);font
 .answer-box .cur{color:#666;}
 .rag-note{font-family:var(--mono);font-size:11px;color:var(--canvas-ink-soft);}
 .rag-note b{color:rgb(var(--red));}
+/* gentle closing reflection on the final screen (after all step-8 content) */
+.closing{margin-top:18px;border-top:1px solid var(--canvas-line);padding-top:16px;}
+.closing__card{background:#fafafa;border:1px solid var(--border);border-radius:6px;padding:16px 20px;}
+.closing__head{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
+.closing__head .sq{width:6px;height:6px;background:var(--blue);border-radius:1px;}
+.closing__title{font-size:16px;font-weight:650;color:var(--ink);margin:0 0 10px;}
+.closing__card p{font-size:13.5px;line-height:1.8;color:var(--ink-soft);margin:0 0 10px;text-wrap:pretty;}
+.closing__card p:last-child{margin-bottom:0;}
+.closing__card strong{color:var(--ink);font-weight:650;}
 
 /* ranking table (step7) */
 .rank{width:100%;}
 .rank__row{display:grid;grid-template-columns:118px 1fr 46px;align-items:center;gap:10px;padding:4px 0;border-bottom:1px solid var(--canvas-line-soft);}
-.rank__lbl{font-family:var(--sans);font-size:12.5px;color:var(--canvas-ink);white-space:nowrap;}
+.rank__lbl{font-family:var(--sans);font-size:12.5px;color:var(--canvas-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .rank__track{height:11px;background:var(--canvas-2);border:1px solid var(--canvas-line);border-radius:2px;overflow:hidden;}
 .rank__fill{height:100%;background:rgb(var(--red));transition:width var(--t);}
 .rank__p{font-family:var(--mono);font-size:11.5px;color:var(--canvas-ink-soft);text-align:right;}
@@ -271,6 +286,117 @@ body{margin:0;font-family:var(--sans);background:var(--bg);color:var(--ink);font
 
 .fade-step{animation:fadeStep var(--enter);}
 @keyframes fadeStep{from{opacity:0;}to{opacity:1;}}
+
+/* ============================================================
+   MOBILE — single-column stacking, taller maps, touch targets.
+   Desktop (>=900px) is completely unchanged: everything below
+   only applies at <=899px. Breakpoints: 899 (tablet/phone), 480 (small phone).
+   ============================================================ */
+@media (max-width:899px){
+  html,body{height:auto;min-height:100%;-webkit-text-size-adjust:100%;}
+  .app{height:auto;min-height:100vh;min-height:100dvh;overflow:visible;}
+
+  /* top bar: allow wrap + shrink, no horizontal overflow */
+  .topbar{height:auto;flex:0 0 auto;flex-wrap:wrap;gap:8px 12px;padding:8px 12px env(safe-area-inset-right,0) 8px;align-items:center;}
+  .topbar__spacer{flex:1 1 100%;height:0;order:5;}
+  .brand{flex:1 1 auto;min-width:0;}
+  .brand__name{font-size:14px;}
+  .brand__sub{display:none;}
+  .stepind{order:6;flex:1 1 auto;font-size:10px;}
+  .readouts{order:7;flex-wrap:wrap;}
+  .readout{padding:4px 9px;}
+  .livetoggle{order:8;}
+
+  /* body: stack rail (explanation+reality) above stage (viz) */
+  .body{flex-direction:column;min-height:0;}
+  .rail{flex:0 0 auto;width:100%;border-right:none;border-bottom:1px solid var(--border);
+    padding:18px 16px 14px;overflow-y:visible;}
+  .rail__title{font-size:21px;}
+  .rail__lead{font-size:16px;margin-top:14px;}
+  .rail__body{font-size:14.5px;}
+  .rail__foot{margin-top:14px;}
+  /* on mobile the rail flows in the page, so the foot note needn't be pushed to the bottom */
+
+  /* stage: give the visualization real height instead of filling a flex row */
+  .stage{flex:0 0 auto;padding:16px 14px;overflow:visible;}
+  .stage__inner{min-height:0;}
+  .canvas{flex:0 0 auto;min-height:460px;height:auto;}
+  .scatter-host{min-height:440px;}
+
+  /* step 5 / 7 use position:absolute;inset:0 wrappers → let them flow so stacked content grows the canvas */
+  .canvas div[style*="position:absolute"][style*="inset:0"]{position:static !important;inset:auto !important;height:auto !important;}
+
+  /* step 5 / 7 two-pane → stack; kill the 1px vertical dividers; release fixed-width columns */
+  .idx-wrap{flex-direction:column;height:auto;gap:14px;}
+  .idx-wrap > div[style*="width:1px"],
+  .canvas div[style*="width:1px"]{display:none !important;}
+  .canvas div[style*="flex:0 0 300px"],
+  .canvas div[style*="flex:0 0 320px"]{flex:1 1 auto !important;width:100% !important;min-height:0;}
+  /* step 5/7 inner flex rows that were horizontal → column on mobile */
+  .canvas > div[style*="display:flex"][style*="gap:18px"]{flex-direction:column !important;}
+  .matrix{max-height:220px;}
+  .matrix__row{gap:6px;}
+  /* each chunk's heat canvas: keep a readable min width, scroll horizontally inside the matrix box if needed */
+  .matrix{overflow-x:auto;}
+
+  /* step 7 map should be tall + the rank list below it scrolls within its own box */
+  .rank{max-height:260px;overflow-y:auto;}
+
+  /* viz containers that were height:100% in a fixed-height canvas now flow → give them sensible min-heights */
+  .cograph-wrap{flex-direction:column;height:auto;gap:22px;}
+  .cocol__svg{min-height:220px;}
+  .guess{height:auto;min-height:420px;padding:18px 12px;}
+  .guess__sentence{font-size:18px;}
+  .heatwrap{height:auto;min-height:0;padding:18px 14px;gap:18px;}
+  .pipe{height:auto;min-height:0;padding:18px 14px;}
+  .gen{height:auto;}
+  /* 4d landing: heat row + map both need room */
+  .canvas .scatter-host{min-height:420px;}
+
+  /* cover: smaller hero, comfortable padding */
+  .cover{padding:18px 16px;justify-content:flex-start;}
+  .cover__title{font-size:32px;}
+  .cover__sub{font-size:16px;}
+  .cover__body p{font-size:15px;}
+  .cover__gloss .row{font-size:13px;}
+
+  /* dark-canvas inner padding that was tuned for desktop — relax so content isn't cramped */
+  .gen{padding:14px 14px;}
+  .closing__card{padding:14px 15px;}
+
+  /* footer: sticky bottom bar, large tap targets, compressed progress */
+  .footer{position:sticky;bottom:0;z-index:40;height:auto;flex:0 0 auto;flex-wrap:wrap;gap:8px 10px;
+    padding:8px 12px calc(8px + env(safe-area-inset-bottom,0));}
+  .nav-btn{padding:11px 16px;min-height:44px;font-size:14px;}
+  .footer .watermark{order:5;}
+  .progress{order:6;flex:1 1 100%;}
+  .seglabel{display:none;}
+  .nav-btn#prevBtn{order:1;}
+  .nav-btn#replayBtn{order:2;}
+  .nav-btn.primary{order:3;margin-left:auto;}
+
+  /* author popover: clamp to viewport so the QR fits a phone screen */
+  .author-pop{position:fixed;left:50%;bottom:64px;top:auto;transform:translateX(-50%) translateY(6px);}
+  .author-trigger.pop-open .author-pop,
+  .author-trigger:focus .author-pop,.author-trigger:focus-within .author-pop{
+    opacity:1;visibility:visible;transform:translateX(-50%) translateY(0);}
+  .author-pop img{width:auto;max-width:90vw;max-height:70vh;}
+  .author-pop::after{display:none;}
+}
+
+/* very small phones */
+@media (max-width:480px){
+  .cover__title{font-size:27px;}
+  .rail__title{font-size:19px;}
+  .readout{padding:3px 7px;}
+  .readout__k{font-size:8px;}
+  .readout__v{font-size:11px;}
+  .canvas{min-height:420px;}
+  .scatter-host{min-height:400px;}
+}
+
+/* on touch devices, enlarge in-SVG label/tick text via a body flag (set in JS) */
+body.is-touch .scatter-host text{font-size:1.18em;}
 </style>
 </head>
 <body>
@@ -473,6 +599,13 @@ function Scatter(host, opts){
       g.addEventListener('mouseleave', ()=>{ tip.style.display='none'; });
       if(o.onPin) g.addEventListener('click', e=>{ pinnedId = (id===pinnedId?null:id); o.onPin(pinnedId); draw(); });
       if(id===o.draggableId) g.addEventListener('mousedown', e=>{ e.preventDefault(); dragging=true; });
+      // ---- touch ----
+      // tap a point: show its tooltip (hover has no equivalent on touch)
+      g.addEventListener('touchstart', e=>{
+        const t=e.touches[0]; if(!t) return;
+        showTip(p, {clientX:t.clientX, clientY:t.clientY});
+        if(id===o.draggableId){ dragging=true; e.preventDefault(); }
+      }, {passive:false});
     });
   }
   function showTip(p,e){
@@ -487,10 +620,16 @@ function Scatter(host, opts){
     if(x+260>r.width) x=r.width-260;
     tip.style.left=x+'px'; tip.style.top=Math.max(6,y)+'px';
   }
-  // drag
+  // drag (mouse + touch)
   function onMove(e){ if(!dragging||!o.onDrag) return; const d=toData(e.clientX,e.clientY); o.onDrag(d.x,d.y); }
+  function onTouchMove(e){ if(!dragging||!o.onDrag) return; const t=e.touches[0]; if(!t) return;
+    e.preventDefault(); /* stop the page scrolling while dragging the dot */
+    const d=toData(t.clientX,t.clientY); o.onDrag(d.x,d.y); }
   function onUp(){ dragging=false; }
-  if(o.draggableId){ window.addEventListener('mousemove',onMove); window.addEventListener('mouseup',onUp); }
+  if(o.draggableId){
+    window.addEventListener('mousemove',onMove); window.addEventListener('mouseup',onUp);
+    window.addEventListener('touchmove',onTouchMove,{passive:false}); window.addEventListener('touchend',onUp); window.addEventListener('touchcancel',onUp);
+  }
 
   const ro=new ResizeObserver(draw); ro.observe(host);
   draw();
@@ -498,7 +637,8 @@ function Scatter(host, opts){
     update(newOpts){ Object.assign(o,newOpts); if(newOpts && 'pinnedId' in newOpts) pinnedId=newOpts.pinnedId; draw(); },
     setPinned(id){ pinnedId=id; draw(); },
     redraw:draw,
-    destroy(){ ro.disconnect(); if(o.draggableId){ window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp); } }
+    destroy(){ ro.disconnect(); if(o.draggableId){ window.removeEventListener('mousemove',onMove); window.removeEventListener('mouseup',onUp);
+      window.removeEventListener('touchmove',onTouchMove); window.removeEventListener('touchend',onUp); window.removeEventListener('touchcancel',onUp); } }
   };
 }
 
@@ -551,14 +691,14 @@ const STEPS = [
  { num:"0", stepOf:0, cover:true, kicker:"INTRODUCTION", title:"导言", en:"Introduction",
    readouts:[{k:"topic",v:"RAG"},{k:"steps",v:"导言 + 8"},{k:"demo",v:"西湖"}], stage:"cover" },
  { num:"1", stepOf:1, kicker:"CORPUS", title:"原文 · 知识库", en:"Source Documents",
-   lead:'这是机器要依靠的<b>全部资料</b>——十二条关于西湖的真实事实。',
+   lead:'这是机器要依靠的<b>全部资料</b>，十二条关于西湖的真实事实。',
    body:'问答机器人不会凭空知道任何事。它能回答的，<strong>只有这里写下的内容</strong>。先把这篇长文读进来。',
    note:'<span class="tag">真实</span>语料改编自维基百科「西湖」，按 CC BY-SA 署名。下文的分词、问题与答案均为真实内容。',
-   reality:'真实的知识库往往是<strong>成千上万篇</strong>文档——产品手册、维基条目、公司内部资料、网页……这里只用 12 句话，是为了让你看清全过程。<strong>模型预训练时见过的知识会过时、也可能记错；把权威资料放进知识库，就是给它一本"开卷考试"用的参考书。</strong>',
+   reality:'真实的知识库往往是<strong>成千上万篇</strong>文档——产品手册、维基条目、公司内部资料、网页……这里只用 12 句话，是为了让你看清全过程。<strong>模型预训练时见过的知识会过时、也可能记错；把权威资料放进知识库，就是给它一本"开卷考试"用的参考书。</strong><br><br>有人会追问：向量不也是同一个模型生成的吗，它记错的东西向量化不也错?说到底，“<strong>照着资料找答案</strong>”和“<strong>凭记忆编答案</strong>”是两回事。前者有原文摆在眼前，照着答不容易跑偏，而且资料能换、能溯源。外挂知识库，图的就是这个。',
    readouts:[{k:"doc",v:"12 句"},{k:"chars",v:String(TOTAL_CHARS)},{k:"source",v:"CC BY-SA"}], stage:"doc" },
  { num:"2", stepOf:2, kicker:"CHUNKING", title:"分块", en:"Chunking",
    lead:'机器先把文章<b>切成一句句小块</b>，方便以后一块块地查。',
-   body:'整篇文章太长，没法整体处理。于是按句子切成 <strong>C1–C12</strong> 十二个带编号的小块——之后的每一步，都是在和这些块打交道。',
+   body:'整篇文章太长，没法整体处理。于是按句子切成 <strong>C1–C12</strong> 十二个带编号的小块。之后的每一步，都是在和这些块打交道。',
    note:'<span class="tag">真实</span>这里按句切分，每句一个 chunk。真实系统的分块策略会更复杂(按长度/重叠窗口)。',
    reality:'实际分块通常按 <em>200–1000 字</em>一段、并让相邻块<strong>重叠</strong>几十字(overlap)，既保住完整语义、又能塞进模型有限的"上下文窗口"。<strong>分块切得好不好，直接决定后面能不能检索到对的内容</strong>——切碎了丢上下文，切太大又混入无关信息。',
    readouts:[{k:"chunks",v:"12"},{k:"strategy",v:"按句"}], stage:"chunks" },
@@ -571,33 +711,34 @@ const STEPS = [
  { num:"4a", stepOf:4, kicker:"EMBEDDING · 1/4", title:"为什么“意思”能变成数字?", en:"Distributional Hypothesis",
    lead:'一个词的意思，藏在它<b>常和哪些词一起出现</b>里。',
    quote:'“一个词的意思，藏在它常和哪些词一起出现里。”',
-   body:'在这篇文章里，<span class="hl">西湖</span>周围反复出现“杭州、湖、堤、景观”；<span class="rd">雷峰塔</span>周围是“倒塌、重建、塔”。两段文字如果总在相似的上下文里出现，意思就相近——这叫<strong>分布假说</strong>。只要把“一段文字常出现在怎样的上下文里”记成数字，就把“意思”变成了数字。',
+   body:'在这篇文章里，<span class="hl">西湖</span>周围反复出现“杭州、湖、堤、景观”；<span class="rd">雷峰塔</span>周围是“倒塌、重建、塔”。两段文字如果总在相似的上下文里出现，意思就相近，这叫<strong>分布假说</strong>。只要把“一段文字常出现在怎样的上下文里”记成数字，就把“意思”变成了数字。<br><br>那么，模型具体怎么把这条直觉变成数字?答案就在下一步：它靠“猜词”自己学。',
    note:'<span class="tag">示意</span>离中心越近 = 共现越强(强度数值为示意)。下方为语料中的真实句子佐证。',
    reality:'这条直觉有句名言：<strong>"You shall know a word by the company it keeps."</strong>(Firth, 1957)。早期的 <span class="hl">Word2Vec(2013)、GloVe(2014)</span> 就是把这个思想做成了算法——靠"一个词周围常出现什么词"来给它定位。',
    readouts:[{k:"mode",v:"共现"},{k:"centers",v:"2"}], stage:"cooc" },
  { num:"4b", stepOf:4, kicker:"EMBEDDING · 2/4", title:"这些数字是“学”出来的", en:"Learned, Not Hand-Set",
    lead:'模型靠玩一个<b>猜词游戏</b>，自己学出这些坐标。',
    quote:'“模型靠玩一个猜词游戏，自己学出这些坐标。”',
-   body:'有一个神经网络(嵌入模型)读过海量文本，反复玩一个游戏：<strong>挡住一个词，猜它周围该是什么</strong>。为了猜得准，它被迫给每段文字分配一组坐标，让意思像的靠在一起、远的分开。训练完它就固定了——依据，就是“怎样的坐标能让‘猜上下文’做得最好”。',
+   body:'一开始，模型给每段文字配的那串数字是<strong>随机乱填</strong>的。然后它反复玩猜词游戏：挡住一个词去猜——<strong>猜错了，就把相关的那串数字微微拧一点</strong>，让下次更可能猜对。这个“拧旋钮”的动作重复了<strong>几十亿次</strong>之后，数字就被一点点逼到位：<strong>经常出现在相似上下文里的文字，数字也变得相似</strong>。<br><br>所以你看，没有人手动定过任何一个数，它们是被“<strong>让猜词更准</strong>”这个目标，一次次挤出来的。',
    note:'<span class="tag">示意</span>候选词与概率为示意演示，用以说明训练目标，并非真实模型输出。',
    reality:'这其实就是模型的<strong>自监督预训练</strong>：<strong>BERT</strong> 玩"完形填空"(挡住中间的词去猜，Masked LM)；<strong>GPT</strong> 玩"猜下一个词"(Next-token)。猜词本质是在所有候选词上做一个概率分布，用 <span class="hl">softmax</span>：'
      +'<div class="formula"><span class="lead">SOFTMAX · 把分数变成概率</span>'
-     +'P(目标词 | 上下文) = exp(<i>z</i><sub>t</sub>) <span class="op">/</span> Σ<sub>j</sub> exp(<i>z</i><sub>j</sub>)</div>'
+     +'P(目标词 | 上下文) = exp(<i>z</i><sub>t</sub>) <span class="op">/</span> Σ<sub>j</sub> exp(<i>z</i><sub>j</sub>)'
+     +'<span class="rng">说白了：把模型对每个候选词的“打分”，换算成加起来等于 100% 的概率。</span></div>'
      +'现代嵌入模型(如 <strong>BGE、E5、OpenAI text-embedding</strong>)还会再用<strong>对比学习</strong>微调：把"该相似的"拉近、"不该相似的"推远。',
    readouts:[{k:"task",v:"掩码猜词"},{k:"top-k",v:"6"}], stage:"guess" },
  { num:"4c", stepOf:4, kicker:"EMBEDDING · 3/4", title:"几百个维度 = 几百条隐藏特征", en:"Hundreds of Hidden Axes",
    lead:'每一维，都是模型自己摸索出的<b>一条打分轴</b>。',
    quote:'“每一维，都是模型自己摸索出的一条打分轴。”',
-   body:'这串数字有几百个(常见 <span class="hl">384</span> 或 768)。可粗略理解为：每一维是一条“打分轴”——这段话有多“关于水”、多“关于地点”、多“关于历史”…… 一段文字的向量，就是它在这几百条轴上的打分。把两句意思相近的话画成热力图，<strong>花纹相似 → 向量相近</strong>。',
+   body:'(一句话被切成好多个词，每个词都有自己的一串数字；模型再把它们<strong>综合成一串</strong>，来代表整句话的意思。所以最后一句话 = 一串数字，不是一堆。)<br><br>这串数字有几百个(常见 <span class="hl">384</span> 或 768)。可粗略理解为：每一维是一条“打分轴”——这段话有多“关于水”、多“关于地点”、多“关于历史”…… 一段文字的向量，就是它在这几百条轴上的打分。把两句意思相近的话画成热力图，<strong>花纹相似 → 向量相近</strong>。',
    note:'<span class="tag">示意</span>这些轴没有人起名字，是模型自己摸出来的；颜色深浅=分量大小(示意)。',
-   reality:'真实嵌入的维度常见是 <span class="hl">384 / 768 / 1024 / 1536 / 3072</span> 维——也就是每段文字会变成<strong>这么多个数字</strong>。我们这里<em>只画 2 维</em>，纯粹是为了"看得见"；<strong>1024 维根本无法在一张平面图里展示</strong>。而且这些维度并没有"水/地点/历史"这样的人类名字，是模型自己学出来的，这里的轴名只是为了直观。',
+   reality:'真实嵌入的维度常见是 <span class="hl">384 / 768 / 1024 / 1536 / 3072</span> 维——也就是每段文字会变成<strong>这么多个数字</strong>。我们这里<em>只画 2 维</em>，纯粹是为了"看得见"；<strong>1024 维根本无法在一张平面图里展示</strong>。<br><br>(说明：“水 / 地点 / 历史”这些轴名，是我们<strong>编出来帮你想象</strong>的；真实的几百个维度<strong>没有名字</strong>，也不对应这么干净的概念。你只需记住一点：<strong>两段话的数字花纹越像，意思就越近。</strong>)',
    readouts:[{k:"dim",v:"384"},{k:"cosine",v:D.heat.sim.toFixed(3)}], stage:"heat" },
  { num:"4d", stepOf:4, kicker:"EMBEDDING · 4/4", title:"于是“意思”成了确定的坐标", en:"A Fixed Point in Space",
    lead:'同一段文字，永远得到同一串数字——意思被<b>钉成了确定的点</b>。',
    quote:'“同一段文字，永远得到同一串数字。”',
-   body:'模型训练好后参数就不变，于是同一段文字喂进去，永远得到同一组数字——<strong>确定、可复现</strong>。“意思”这个抽象的东西，被钉成了高维空间里一个确定的点。两段话有多像，就看它们的点离得多近——这就是<strong>余弦相似度</strong>，下一步检索全靠它。',
+   body:'模型训练好后参数就不变，于是同一段文字喂进去，永远得到同一组数字，<strong>确定、可复现</strong>。“意思”这个抽象的东西，被钉成了高维空间里一个确定的点。两段话有多像，就看它们的点离得多近——这就是<strong>余弦相似度</strong>，下一步检索全靠它。<br><br>注意：你在图上看到的是 <strong>2D 平面</strong>，那只是为了画得出来。真实的点在<strong>几百到上千维</strong>的空间里，人眼根本看不见。别把“向量”想成平面上的点，它是高维里的一串数字，这张图只是它的<strong>影子</strong>。',
    note:'<span class="tag">示意</span>位置只表示意思的远近；这是高维压扁的 2D 示意。真实系统用 384 维余弦相似度。',
-   reality:'两段文字的向量，用<strong>余弦相似度</strong>衡量有多像——只看<strong>方向(语义)</strong>、不受文本长短影响：'
+   reality:'在这张“意思地图”上，<strong>方向越一致的两段文字，落点也越靠近</strong>——所以“离得近”和“方向像”说的是同一件事。用“方向”来比还有个好处：<strong>不受文章长短影响</strong>，长文也好、短句也好，只要意思朝同一方向，就算相近。这就是<strong>余弦相似度</strong>：'
      +'<div class="formula"><span class="lead">COSINE SIMILARITY · 余弦相似度</span>'
      +'cos(<i>A</i>, <i>B</i>) = (<i>A</i> <span class="op">·</span> <i>B</i>) / (‖<i>A</i>‖ <span class="op">·</span> ‖<i>B</i>‖) '
      +'= Σ<sub>i</sub> <i>A</i><sub>i</sub><i>B</i><sub>i</sub> / ( √Σ<sub>i</sub> <i>A</i><sub>i</sub><sup>2</sup> <span class="op">·</span> √Σ<sub>i</sub> <i>B</i><sub>i</sub><sup>2</sup> )'
@@ -606,18 +747,18 @@ const STEPS = [
    readouts:[{k:"dim",v:"384"},{k:"coord",v:"("+D.coords2d.C4.x.toFixed(2)+","+D.coords2d.C4.y.toFixed(2)+")"},{k:"cosine",v:"下一步"}], stage:"landing" },
  { num:"5", stepOf:5, kicker:"INDEX", title:"入库 · 索引", en:"Index",
    lead:'把 12 段文字的坐标<b>存进向量库</b>，这张“意思地图”就是索引。',
-   body:'每个 chunk 都变成一行数字(它的向量)，整齐排进库里——左边是 12 条<strong>向量热力矩阵</strong>。再把它们按坐标画到一张<strong>2D 意思地图</strong>上：意思近的句子，点也聚在一起。以后查找，就在这张图上找最近的点。',
+   body:'每个 chunk 都变成一行数字(它的向量)，整齐排进库里——左边是 12 条<strong>向量热力矩阵</strong>。再把它们按坐标画到一张<strong>2D 意思地图</strong>上：意思近的句子，点也聚在一起。以后查找，就在这张图上找最近的点。<br><br>普通数据库是按“<strong>精确的关键词</strong>”查的——差一个字都可能找不到。<strong>向量数据库</strong>不一样，它按“<strong>意思相近</strong>”查：你问“雷峰塔什么时候塌的”，就算资料里写的是“倒塌”，意思相近，照样能被找到。<strong>按意义检索、而不是按字面</strong>，这就是它跟普通数据库最不一样的地方。',
    note:'<span class="tag">示意</span>向量分量与 2D 位置均为示意;这是高维压扁的 2D 示意，位置只表示意思的远近。',
-   reality:'真实向量库(<span class="hl">FAISS、Milvus、pgvector、Pinecone、Qdrant</span> 等)能存<strong>百万到十亿</strong>条向量。为了不必逐条比较，它们用<strong>近似最近邻(ANN)</strong>索引(如 <strong>HNSW</strong>)，在海量向量里<em>毫秒级</em>找出最像的几条。我们这张 2D"意思地图"只是它的卡通示意。',
+   reality:'向量库里存的是<strong>每段文字的向量 + 它的原文</strong>：向量用来“按意思找”，找到后再把对应原文取出来喂给模型。<br><br>真实向量库(<span class="hl">FAISS、Milvus、pgvector、Pinecone、Qdrant</span> 等)能存<strong>百万到十亿</strong>条向量。检索时不逐条比对，而是<strong>先粗筛分区、再精算</strong>(称为近似最近邻 <strong>ANN</strong>)，所以能<em>毫秒级</em>返回。我们这张 2D"意思地图"只是它的卡通示意。',
    readouts:[{k:"chunks",v:"12"},{k:"dim",v:"384"}], stage:"index" },
  { num:"6", stepOf:6, kicker:"QUERY", title:"提问 → 问题向量化", en:"Query Embedding",
    lead:'问题也要<b>走一遍同样的流程</b>，变成它自己的一个坐标。',
    body:'用户问：「<strong>'+D.question+'</strong>」。这句话同样先分词、再变成 384 维向量，最后落成意思地图上的一个<span class="hl">蓝色点</span>。只有变成同一种坐标，才能和库里的 12 个点比较远近。',
    note:'<span class="tag">真实</span>问题文本为真实内容;其向量与坐标为示意(与语料同一套示意嵌入)。',
-   reality:'关键点：问题必须用<strong>和文档同一个嵌入模型</strong>来编码，才能落在<strong>同一个向量空间</strong>里，两者才可比较。<em>问不对模型、或换了模型，坐标就对不上、也就查不准。</em>',
+   reality:'这里有个要紧处：问题必须用<strong>和文档同一个嵌入模型</strong>来编码，才能落在<strong>同一个向量空间</strong>里，两者才可比较。<em>问不对模型、或换了模型，坐标就对不上、也就查不准。</em><br><br>你<strong>现场新问</strong>的问题，模型从没见过，为什么也能立刻变成向量?因为模型学会的是一套<strong>通用的“把文字变数字”的本领</strong>，不是死记每一句话；任何新句子都能套用这套本领来编码。',
    readouts:[{k:"input",v:"问题"},{k:"dim",v:"384"}], stage:"query" },
  { num:"7", stepOf:7, kicker:"RETRIEVAL", title:"检索", en:"Retrieval",
-   lead:'在地图上找<b>离问题最近的句子</b>——离得越近，意思越像。',
+   lead:'在地图上找<b>离问题最近的句子</b>，离得越近，意思越像。',
    body:'机器把问题的点和 12 个 chunk 逐一算距离，排出最像的几句。<strong>C6(雷峰塔)</strong> 离得最近，被选为命中。试着<span class="hl">拖动蓝色“问题”点</span>，排名和连线会实时重算——用手感受“近=意思像”。',
    note:'<span class="tag">示意</span>此处相似度按 2D 地图距离实时计算，用于演示“近=像”;真实系统用 384 维余弦相似度。',
    reality:'真实检索会取<strong>最相似的前 k 条</strong>(top-k，常取 <em>3–10</em>)，有时再用一个更精的 <span class="hl">重排模型(reranker)</span> 复查一遍提高准确率。<strong>取多少、排得准不准，直接影响最终答案质量。</strong>',
@@ -626,7 +767,7 @@ const STEPS = [
    lead:'把<b>找到的句子</b>和你的问题一起交给模型，让它用自己的话回答。',
    body:'检索到的 C6 和问题被拼进一段提示词(prompt)：<strong>[系统] + [资料 C6] + [问题]</strong>。模型只依据这段资料作答，流式吐出答案。这套“<strong>先检索、再回答</strong>”的办法，就叫 <span class="hl">RAG</span>。',
    note:'<span class="tag">真实</span>问题与答案为真实内容。',
-   reality:'把检索到的资料拼进提示词(prompt)当<strong>上下文</strong>，模型据此作答——这就是 <span class="hl">RAG：Retrieval-Augmented Generation</span>(Lewis et al., 2020)。它的三大好处：<strong>① 少幻觉</strong>(有据可依)、<strong>② 知识可更新</strong>(换知识库即可，不必重训模型)、<strong>③ 可溯源</strong>(能标出答案来自哪篇)。',
+   reality:'把检索到的资料拼进提示词(prompt)当<strong>上下文</strong>，模型据此作答，这就是 <span class="hl">RAG：Retrieval-Augmented Generation</span>(Lewis et al., 2020)。它的三大好处：<strong>① 少幻觉</strong>(有据可依)、<strong>② 知识可更新</strong>(换知识库即可，不必重训模型)、<strong>③ 可溯源</strong>(能标出答案来自哪篇)。<br><br>模型<strong>不是把 C6 原样抄给你</strong>，而是<strong>读懂它、再用自己的话</strong>重新组织成一句通顺的回答。',
    readouts:[{k:"context",v:"C6"},{k:"mode",v:"RAG"}], stage:"generation" },
 ];
 
@@ -646,9 +787,14 @@ const STAGES = {
      <div class="cover__body">
        <p>你问 AI 一个问题，它张口就答。可它是<strong>真"知道"</strong>，还是<strong>临时去查的</strong>?</p>
        <p>今天大量 AI 问答、客服、搜索的背后，用的是一套叫 <span class="hl">RAG(检索增强生成)</span> 的办法：先去一个知识库里<strong>查到相关资料</strong>，再带着资料<strong>回答</strong>。这能让模型少编瞎话(幻觉)、知识能随时更新、答案还能溯源。</p>
-       <p>难点在于：计算机并不"读懂"文字，它只会算数字。那么——一句话的<strong>意思</strong>，是怎么变成数字、被存起来、又被一个问题精确找到的?</p>
+       <p>难点在于：计算机并不"读懂"文字，它只会算数字。那么，一句话的<strong>意思</strong>，到底是怎么变成数字、被存起来、又被一个问题精确找到的?</p>
+       <p>你可能会问：模型训练时不是已经"背"了海量知识吗，为什么还要外挂一个库?那些背下来的知识<strong>会过时、可能记混、也不包含你自己的资料</strong>(你公司的文档、你昨天写的笔记)。与其让它<strong>凭记忆硬答</strong>，不如<strong>先查一份可靠资料、再照着回答</strong>：这就像开卷考试，答案更准、资料能随时更换、还能告诉你"这句是从哪查到的"。</p>
        <p>这个演示用一篇真实的<strong>杭州西湖</strong>短文当例子，带你一步步、放慢了看完整个过程：<span class="cover__pipe">分词 → 变成向量 → 存进向量库 → 检索 → 生成答案</span></p>
      </div>
+     <div class="cover__gloss"><div class="gh">先认两个词</div><dl>
+       <div class="row">· <b>模型</b>：就是那个会回答你问题的 AI(像 ChatGPT 背后的"大脑")。</div>
+       <div class="row">· <b>向量</b>：听着玄，其实就是<b>一串数字</b>(也叫"坐标")——下面你会亲眼看到一句话怎么变成它。</div>
+     </dl></div>
      <div class="cover__note"><span class="tag">诚实提示</span><span>为了能在屏幕上画出来，我们把高维向量压成了<strong>二维平面</strong>。真实的向量有几百到几千维(常见 1024 维)，人眼根本画不出、也想象不来——但背后的道理完全一样。</span></div>
      <div class="cover__cta"><button id="coverStart">开始 →</button></div>
    </div></div>`;
@@ -859,6 +1005,15 @@ const STAGES = {
        </div>
        <div class="answer-box" id="ansbox"><span id="anst"></span><span class="cur" id="anscur">▍</span></div>
        <div class="rag-note" id="ragnote" style="opacity:0;transition:opacity .5s">这套“先检索、再回答”的办法，就叫 <b>RAG</b>。</div>
+       <div class="closing">
+         <div class="closing__card">
+           <div class="closing__head"><span class="sq"></span>CLOSING · 写在最后</div>
+           <h3 class="closing__title">写在最后 · 你其实不必懂这些</h3>
+           <p>说实话，不懂这些，也完全能用 AI——就像不懂发动机，照样能开车。</p>
+           <p>但如果你想<strong>用得更好</strong>：知道了它是“<strong>先查资料、再回答</strong>”的，你就明白——把<strong>背景、资料、要求</strong>写清楚地交给它，答案会稳得多；也明白它为什么偶尔会“一本正经地胡说”(查不到就容易编)。</p>
+           <p>这正是 <strong>Prompt 工程</strong> 的底气：不再靠碰运气试“咒语”，而是知道<strong>为什么该这么写</strong>，并能把好用的写法，<strong>总结成自己的一套方法</strong>。</p>
+         </div>
+       </div>
      </div></div>`;
    ['b0','b1','b2'].forEach((id,i)=> after(200+i*420, ()=>{ const e=document.getElementById(id); if(e) e.classList.add('in'); }));
    after(1700, ()=>{ const box=document.getElementById('ansbox'); if(box) box.classList.add('in'); stream(D.answer); });
@@ -911,6 +1066,12 @@ function build(){
   document.getElementById('prevBtn').onclick=()=>go(idx-1);
   document.getElementById('nextBtn').onclick=()=>go(idx+1);
   document.getElementById('replayBtn').onclick=()=>render();
+  // author popover: open on TAP (toggle) for touch, in addition to hover/focus
+  const trig=root.querySelector('.author-trigger');
+  if(trig){
+    trig.addEventListener('click', e=>{ e.stopPropagation(); trig.classList.toggle('pop-open'); });
+    document.addEventListener('click', e=>{ if(!trig.contains(e.target)) trig.classList.remove('pop-open'); });
+  }
   render();
 }
 
@@ -984,6 +1145,9 @@ window.nextStep=()=>go(idx+1); window.prevStep=()=>go(idx-1); window.replayStep=
 
 // keyboard
 window.addEventListener('keydown', e=>{ if(e.key==='ArrowRight') go(idx+1); else if(e.key==='ArrowLeft') go(idx-1); else if(e.key==='r'||e.key==='R') render(); });
+
+// touch flag → enlarges in-SVG map text on touch devices (see body.is-touch CSS)
+if(('ontouchstart' in window) || (navigator.maxTouchPoints>0)) document.body.classList.add('is-touch');
 
 build();
 </script>
