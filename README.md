@@ -80,7 +80,7 @@ python -m http.server 8000
 <details>
 <summary>关注作者</summary>
 
-<img src="assets/xhs-follow.png" alt="关注 Sparker" width="240">
+<img src="assets/xhs-follow.png" alt="关注 Sparker" width="340">
 
 </details>
 

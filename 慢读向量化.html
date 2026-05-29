@@ -263,7 +263,8 @@ body{margin:0;font-family:var(--sans);background:var(--bg);color:var(--ink);font
   opacity:0;visibility:hidden;pointer-events:none;transition:opacity .14s ease,transform .14s ease,visibility .14s;z-index:60;}
 .author-trigger:hover .author-pop,.author-trigger:focus .author-pop,.author-trigger:focus-within .author-pop{
   opacity:1;visibility:visible;transform:translateX(-50%) translateY(0);}
-.author-pop img{display:block;width:200px;height:auto;object-fit:contain;border-radius:3px;}
+/* enlarged so the QR inside the portrait card is scannable; clamp height so the whole card stays on-screen above the footer */
+.author-pop img{display:block;width:350px;max-width:88vw;height:auto;max-height:calc(100vh - 96px);object-fit:contain;border-radius:3px;}
 /* little arrow pointing down to the name */
 .author-pop::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
   border:6px solid transparent;border-top-color:#fff;filter:drop-shadow(0 1px 0 var(--border));}
